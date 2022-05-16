@@ -133,6 +133,13 @@ def create_list_of_start_nodes(graph):
             start_nodes.append(node)
     return start_nodes
 
+def delete_elements_from_list(list_object, indices):
+    indices = sorted(indices, reverse=True)
+    for idx in indices:
+        if idx < len(list_object):
+            list_object.pop(idx)
+    return list_object
+
 def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, remove_cutoff_edges = False):
     """inputs:
     n_points = every 'n_points'th point on the first centerline is used to start a radial trajectory
@@ -141,9 +148,9 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, remove_cutof
     graph = nx.DiGraph(number_of_centerlines = len(X)) # directed graph to store nodes and edges
     cl_indices = [] # list of lists to store *centerline* indices that will be part of the graph
     n_centerlines = len(X)
-    for i in range(n_centerlines):
-        cl_indices.append([])
-    # loop over every 'n_points'th point on first centerline to add radial nodes and edges:
+    for i in range(n_centerlines): # initialize 'cl_indices'
+        cl_indices.append([]) 
+    # add radial nodes and edges:
     for ind1 in range(0, len(X[0]), n_points): 
         indices, x, y = find_indices(ind1, X, Y, P, Q)
         new_node_inds = np.arange(len(graph), len(graph) + len(indices))
@@ -152,23 +159,23 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, remove_cutof
             graph.add_node(new_node_inds[i], x = x[i], y = y[i], age = i, curv = 0)
         for i in range(len(indices)-1):
             graph.add_edge(new_node_inds[i], new_node_inds[i+1], edge_type = 'radial', age = i)
-    # add 'intermediate' trajectories:
     for cl_number in trange(n_centerlines - 1): 
-        large_gap_inds = np.where(np.diff(cl_indices[cl_number]) > 2*n_points)
+        # add 'intermediate' trajectories:
+        large_gap_inds = np.where(np.diff(cl_indices[cl_number]) > 2*n_points) # find gaps that are longer than 2 x the number of points
         if len(large_gap_inds) > 0:
-            inds = large_gap_inds[0]
-            diffs = np.diff(cl_indices[cl_number])[inds]
-            inds = np.array(cl_indices[cl_number])[inds] + np.round(diffs*0.5).astype('int')
-            for ind1 in inds:
-                indices, x, y = find_indices(ind1, X[cl_number:], Y[cl_number:], P[cl_number:], Q[cl_number:])
-                new_node_inds = np.arange(len(graph), len(graph) + len(indices))
+            large_inds = large_gap_inds[0]
+            diffs = np.diff(cl_indices[cl_number])[large_inds]
+            large_inds = np.array(cl_indices[cl_number])[large_inds] + np.round(diffs*0.5).astype('int') # indices of new nodes on centerline
+            for ind1 in large_inds:
+                indices, x, y = find_indices(ind1, X[cl_number:], Y[cl_number:], P[cl_number:], Q[cl_number:]) # find indices on younger centerlines, using DTW correlation
+                new_node_inds = np.arange(len(graph), len(graph) + len(indices)) # create node indices for new nodes
                 for i in range(len(indices)):
-                    cl_indices[cl_number+i].append(indices[i])
-                    graph.add_node(new_node_inds[i], x = x[i], y = y[i], age = cl_number + i)
+                    cl_indices[cl_number+i].append(indices[i]) # add indices of new nodes to list of indices of centerline nodes
+                    graph.add_node(new_node_inds[i], x = x[i], y = y[i], age = cl_number + i) # add new nodes to graph
                 for i in range(len(indices)-1):
-                    graph.add_edge(new_node_inds[i], new_node_inds[i+1], edge_type = 'radial')
+                    graph.add_edge(new_node_inds[i], new_node_inds[i+1], edge_type = 'radial') # add new edges to graph
             for i in range(cl_number, n_centerlines):
-                cl_indices[i].sort()
+                cl_indices[i].sort() # sort indices of all nodes along current centerline
     # add edges that represent centerlines:            
     x = []
     y = []
@@ -200,18 +207,19 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, remove_cutof
     cutoff_nodes = []
     for node in tqdm(start_nodes):
         path, path_ages = find_radial_path(graph, node)
-        ds = []
-        for i in range(len(path)-1):
+        ds = [] # distances between consecutive radial nodes
+        for i in range(len(path)-1): # compute and store the distances
             ds.append(((x[path[i+1]] - x[path[i]])**2 + (y[path[i+1]] - y[path[i]])**2)**0.5)
         if len(ds) > 1:
-            if np.max(np.abs(np.diff(ds))) > max_dist:
-                if len(np.where(np.diff(ds) > max_dist)[0]) > 0:
-                    ind = np.where(np.diff(ds) > max_dist)[0][0] + 1
-                else:
-                    ind = np.where(np.array(ds) > max_dist)[0][0]
-                if (path[ind], path[ind+1]) not in edges_to_be_removed:
-                    edges_to_be_removed.append((path[ind], path[ind+1]))
-                    cutoff_nodes.append(path[ind+1])
+            # if there is at least one place where the increase in the distance between nodes is larger than 'max_dist':
+            if np.max(np.abs(np.diff(ds))) > max_dist: 
+                inds = list(np.where(np.diff(ds) > max_dist)[0] + 1) # indices where the difference is larger than max_dist
+                if  ds[0] > max_dist: # if the first distance is larger than 'max_dist'
+                    inds = [0] + inds # the first node needs to be added to the list of cutoff nodes
+                for ind in inds: # collect cutoff-related edges and cutoff nodes for all indices
+                    if (path[ind], path[ind+1]) not in edges_to_be_removed:
+                        edges_to_be_removed.append((path[ind], path[ind+1]))
+                        cutoff_nodes.append(path[ind+1])
     graph.graph['cutoff_nodes'] = cutoff_nodes
     if remove_cutoff_edges: # only remove cutoff edges if you want to
         for edge in edges_to_be_removed:
@@ -219,6 +227,15 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, remove_cutof
     # redo list of nodes from which radial trajectories start
     start_nodes = create_list_of_start_nodes(graph)
     graph.graph['start_nodes'] = start_nodes
+    # clean up a few nodes that are not properly connected up along the centerlines:
+    cl_nodes = []
+    for cl_number in trange(len(X)): # collect all nodes that are connected along the centerlines
+        path = find_longitudinal_path(graph, cl_number)
+        cl_nodes += path
+    for node in set(cl_nodes) ^ set(graph.nodes): # if a node is not in 'cl_nodes', remove it from the graph
+        graph.remove_node(node)
+        if node in graph.graph['start_nodes']: # remove the node from 'start_nodes' as well
+            graph.graph['start_nodes'].remove(node)
     return graph
 
 def plot_graph(graph, ax):
@@ -261,6 +278,13 @@ def create_polygon_graph(graph):
                     outer_poly_boundary = nx.shortest_path(graph, source=node_4, target=node_3)
                 except: # if there is no path between node 4 and node 3
                     outer_poly_boundary = []
+                # sometimes 'node_3' and 'node_4' are the same node, and this is needed:
+                if (graph.nodes[node_3]['x'] == graph.nodes[node_4]['x']) & (graph.nodes[node_3]['y'] == graph.nodes[node_4]['y']):
+                    x3 = graph.nodes[node_3]['x']
+                    x4 = graph.nodes[node_4]['x']
+                    y3 = graph.nodes[node_3]['y']
+                    y4 = graph.nodes[node_4]['y']
+                    coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x1, y1)]
                 if len(outer_poly_boundary) == 2: # 2 nodes on the outer boundary
                     x3 = graph.nodes[node_3]['x']
                     x4 = graph.nodes[node_4]['x']
@@ -289,12 +313,25 @@ def create_polygon_graph(graph):
                             poly = poly.buffer(0) # fix the invalid polygon
                             poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1)
                             cl_start_nodes.append(path[i])
+            else: 
+                if i == 0: # something is needed at the begining of the centerline even when there is no 'node_3' or 'node_4', so we just make up a polygon
+                    x3 = x2 
+                    y3 = y2 + 1.0
+                    x4 = x1 
+                    y4 = y1 + 1.0
+                    coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x1, y1)]
+                    poly = Polygon(LinearRing(coords))
+                    if not poly.is_valid: # fix poly
+                        poly = poly.buffer(0) # fix the invalid polygon
+                    poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1)
+                    cl_start_nodes.append(path[i])
+
         for i in range(len(path) - 2): # add graph edges
             if (path[i] in poly_graph) & (path[i+1] in poly_graph):
                 poly_graph.add_edge(path[i], path[i+1], edge_type = 'channel')
         # need to reconnect broken centerline paths in polygon graph:
         path1 = np.array(find_longitudinal_path(graph, node))
-        path2 = find_longitudinal_path(poly_graph, cl_start_nodes[-1])
+        # path2 = find_longitudinal_path(poly_graph, cl_start_nodes[-1])
         sink_nodes = [] # find sink nodes
         for n in poly_graph.nodes:
             if poly_graph.out_degree(n) == 0:
@@ -681,7 +718,7 @@ def create_scrolls_and_find_connected_scrolls(graph, W, cutoff_area, ax):
         for i in component:
             if scrolls[i].area > 1.0:
                 ax.add_patch(PolygonPatch(scrolls[i], facecolor=color, edgecolor='k'))
-    return scrolls, scroll_ages, all_bars_graph
+    return scrolls, scroll_ages, all_bars_graph, cutoffs
 
 def create_and_plot_bar_graphs(graph1, graph2, ts, all_bars_graph, scrolls, scroll_ages, cutoffs, dt, X, Y, W, saved_ts, ax):
     # create polygon graphs for the banks:
