@@ -238,6 +238,73 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, remove_cutof
             graph.graph['start_nodes'].remove(node)
     return graph
 
+from copy import deepcopy
+
+def reconnect_nodes_along_centerline(graph1, graph2, cl_number):
+    # function for reconnecting nodes along a centerline in graph2, based on nodes along the same centerline in graph1
+    path = mg.find_longitudinal_path(graph1, cl_number)
+    cl_nodes = []
+    for node in path:
+        if node in graph2:
+            cl_nodes.append(node)
+    for i in range(len(cl_nodes) - 1):
+        if (cl_nodes[i], cl_nodes[i+1]) not in graph2.edges:
+            graph2.add_edge(cl_nodes[i], cl_nodes[i+1], edge_type = 'channel')
+            
+def remove_high_density_nodes(graph1, min_dist, max_dist):
+    graph2 = deepcopy(graph1)
+    for cl_number in trange(graph1.graph['number_of_centerlines']):
+        path = mg.find_longitudinal_path(graph2, cl_number)
+        dx, dy, ds, s = compute_derivatives(graph2.graph['x'][path], graph2.graph['y'][path])
+        small_inds = np.where(ds < min_dist)[0]
+        inds_to_be_removed = []
+        if len(small_inds) > 0:
+            if small_inds[0] != 0:
+                small_inds = np.hstack((0, small_inds))
+            if small_inds[-1] != len(ds) - 1:
+                small_inds = np.hstack((small_inds, len(ds) - 1))
+            inds1 = np.where(np.diff(small_inds)>1)[0] + 1
+            inds2 = inds1-1
+            inds2 = inds2[1:]
+            for i in range(len(inds2)):
+                if inds1[i] == inds2[i]: # if there is only one node that needs to be removed 
+                    inds_to_be_removed.append(small_inds[inds1[i]])
+                else:
+                    dist = 0
+                    for small_ind in range(small_inds[inds1[i]]+1, small_inds[inds2[i]]+1):
+                        dist += ds[small_ind]
+                        if dist < min_dist:
+                            inds_to_be_removed.append(small_ind)
+                        else:
+                            dist = 0
+            if len(inds_to_be_removed) > 0:
+                inds = np.array(path)[np.array(inds_to_be_removed)]
+                for node in inds:
+                    path1 = mg.find_radial_path_2(graph2, node)
+                    for n in path1:
+                        successors = graph2.successors(n)
+                        for successor in successors:
+                            if graph2[n][successor]['edge_type'] == 'channel':
+                                n_successor = successor
+                        predecessors = graph2.predecessors(n)
+                        for predecessor in predecessors:
+                            if graph2[predecessor][n]['edge_type'] == 'channel':
+                                n_predecessor = predecessor
+                        x1 = graph2.nodes[n_successor]['x']
+                        y1 = graph2.nodes[n_successor]['y']
+                        x2 = graph2.nodes[n_predecessor]['x']
+                        y2 = graph2.nodes[n_predecessor]['y']
+                        cl_dist = ((x2-x1)**2 + (y2-y1)**2)**0.5
+                        if cl_dist < max_dist:
+                            graph2.remove_node(n)
+                            if node in graph2.graph['start_nodes']:
+                                graph2.graph['start_nodes'].remove(n)
+                        else:
+                            break
+                for cln in range(cl_number, graph1.graph['number_of_centerlines']):
+                    reconnect_nodes_along_centerline(graph1, graph2, cln)
+    return graph2
+
 def plot_graph(graph, ax):
     cmap = plt.get_cmap("tab10")
     for node in np.arange(graph.graph['number_of_centerlines']):
@@ -268,6 +335,12 @@ def create_polygon_graph(graph):
             for n in node_2_children:
                 if graph[node_2][n]['edge_type'] == 'radial':
                     node_3 = n
+            if (not node_3) & (i < len(path) - 2):
+                node_2 = path[i+2]
+                node_2_children = list(graph.successors(node_2))
+                for n in node_2_children:
+                    if graph[node_2][n]['edge_type'] == 'radial':
+                        node_3 = n
             if node_3 and node_4: # only add a new polygon if there is another centerline
                 coords = []
                 x1 = graph.nodes[node_1]['x']
@@ -314,7 +387,7 @@ def create_polygon_graph(graph):
                             poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1)
                             cl_start_nodes.append(path[i])
             else: 
-                if i == 0: # something is needed at the begining of the centerline even when there is no 'node_3' or 'node_4', so we just make up a polygon
+                if i == 0: # something is needed at the beginning of the centerline even when there is no 'node_3' or 'node_4', so we just make up a polygon
                     x3 = x2 
                     y3 = y2 + 1.0
                     x4 = x1 
@@ -481,12 +554,20 @@ def polygon_width_and_length(graph, node):
         node_2 = path[1]
         node_1_children = list(graph.successors(node_1))
         node_2_children = list(graph.successors(node_2))
+        node_3 = False
+        node_4 = False
         for n in node_1_children:
             if graph[node_1][n]['edge_type'] == 'radial':
                 node_4 = n
         for n in node_2_children:
             if graph[node_2][n]['edge_type'] == 'radial':
                 node_3 = n
+        if (not node_3) & (len(path) > 2):
+            node_2 = path[2]
+            node_2_children = list(graph.successors(node_2))
+            for n in node_2_children:
+                if graph[node_2][n]['edge_type'] == 'radial':
+                    node_3 = n
         coords = []
         x1 = graph.nodes[node_1]['x']
         x2 = graph.nodes[node_2]['x']
