@@ -242,7 +242,7 @@ from copy import deepcopy
 
 def reconnect_nodes_along_centerline(graph1, graph2, cl_number):
     # function for reconnecting nodes along a centerline in graph2, based on nodes along the same centerline in graph1
-    path = mg.find_longitudinal_path(graph1, cl_number)
+    path = find_longitudinal_path(graph1, cl_number)
     cl_nodes = []
     for node in path:
         if node in graph2:
@@ -250,11 +250,28 @@ def reconnect_nodes_along_centerline(graph1, graph2, cl_number):
     for i in range(len(cl_nodes) - 1):
         if (cl_nodes[i], cl_nodes[i+1]) not in graph2.edges:
             graph2.add_edge(cl_nodes[i], cl_nodes[i+1], edge_type = 'channel')
+
+def compute_derivatives(x, y):
+    """function for computing first derivatives of a curve (centerline)
+    x,y are cartesian coodinates of the curve
+    outputs:
+    dx - first derivative of x coordinate
+    dy - first derivative of y coordinate
+    ds - distances between consecutive points along the curve
+    s - cumulative distance along the curve"""
+    dx = np.diff(x) # first derivatives
+    dy = np.diff(y)   
+    ds = np.sqrt(dx**2+dy**2)
+    s = np.hstack((0,np.cumsum(ds)))
+    return dx, dy, ds, s
             
 def remove_high_density_nodes(graph1, min_dist, max_dist):
+    """function for removing nodes and edges where radial lines are too dense (especially after cutoffs)
+    example usage:
+    graph = mg.remove_high_density_nodes(graph, min_dist = 10, max_dist = 30)"""
     graph2 = deepcopy(graph1)
     for cl_number in trange(graph1.graph['number_of_centerlines']):
-        path = mg.find_longitudinal_path(graph2, cl_number)
+        path = find_longitudinal_path(graph2, cl_number)
         dx, dy, ds, s = compute_derivatives(graph2.graph['x'][path], graph2.graph['y'][path])
         small_inds = np.where(ds < min_dist)[0]
         inds_to_be_removed = []
@@ -280,7 +297,7 @@ def remove_high_density_nodes(graph1, min_dist, max_dist):
             if len(inds_to_be_removed) > 0:
                 inds = np.array(path)[np.array(inds_to_be_removed)]
                 for node in inds:
-                    path1 = mg.find_radial_path_2(graph2, node)
+                    path1 = find_radial_path_2(graph2, node)
                     for n in path1:
                         successors = graph2.successors(n)
                         for successor in successors:
@@ -372,6 +389,16 @@ def create_polygon_graph(graph):
                     y4 = graph.nodes[outer_poly_boundary[1]]['y']
                     y5 = graph.nodes[outer_poly_boundary[0]]['y']
                     coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x5, y5), (x1, y1)]
+                # if len(outer_poly_boundary) == 4: # 4 nodes on the outer boundary
+                #     x3 = graph.nodes[outer_poly_boundary[3]]['x']
+                #     x4 = graph.nodes[outer_poly_boundary[2]]['x']
+                #     x5 = graph.nodes[outer_poly_boundary[1]]['x']
+                #     x6 = graph.nodes[outer_poly_boundary[0]]['x']
+                #     y3 = graph.nodes[outer_poly_boundary[3]]['y']
+                #     y4 = graph.nodes[outer_poly_boundary[2]]['y']
+                #     y5 = graph.nodes[outer_poly_boundary[1]]['y']
+                #     y6 = graph.nodes[outer_poly_boundary[0]]['x']
+                #     coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x5, y5), (x6, y6), (x1, y1)]
                 if len(coords) > 0:
                     poly = Polygon(LinearRing(coords))
                     if poly.is_valid: # add node only if polygon is valid
