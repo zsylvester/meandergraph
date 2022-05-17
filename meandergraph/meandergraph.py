@@ -272,33 +272,36 @@ def remove_high_density_nodes(graph1, min_dist, max_dist):
     graph2 = deepcopy(graph1)
     for cl_number in trange(graph1.graph['number_of_centerlines']):
         path = find_longitudinal_path(graph2, cl_number)
+        # compute distances between nodes along centerline (we need only 'ds')
         dx, dy, ds, s = compute_derivatives(graph2.graph['x'][path], graph2.graph['y'][path])
-        small_inds = np.where(ds < min_dist)[0]
-        inds_to_be_removed = []
+        small_inds = np.where(ds < min_dist)[0] # indices of distances that are too small
+        nodes_to_be_removed = [] # for storing nodes that need to be removed
         if len(small_inds) > 0:
-            if small_inds[0] != 0:
-                small_inds = np.hstack((0, small_inds))
+            if small_inds[0] != 0: 
+                small_inds = np.hstack((0, small_inds)) # add first index
             if small_inds[-1] != len(ds) - 1:
-                small_inds = np.hstack((small_inds, len(ds) - 1))
-            inds1 = np.where(np.diff(small_inds)>1)[0] + 1
+                small_inds = np.hstack((small_inds, len(ds) - 1)) # add last index
+            inds1 = np.where(np.diff(small_inds)>1)[0] + 1 # indices where new segments with short distances start
             inds2 = inds1-1
-            inds2 = inds2[1:]
+            inds2 = inds2[1:] # indices where segments with short distances end
             for i in range(len(inds2)):
                 if inds1[i] == inds2[i]: # if there is only one node that needs to be removed 
-                    inds_to_be_removed.append(small_inds[inds1[i]])
+                    nodes_to_be_removed.append(small_inds[inds1[i]])
                 else:
-                    dist = 0
+                    dist = 0 # cumulative distance along nodes
+                    # for each continuous segment with short distances:
                     for small_ind in range(small_inds[inds1[i]]+1, small_inds[inds2[i]]+1):
                         dist += ds[small_ind]
                         if dist < min_dist:
-                            inds_to_be_removed.append(small_ind)
+                            nodes_to_be_removed.append(small_ind)
                         else:
-                            dist = 0
-            if len(inds_to_be_removed) > 0:
-                inds = np.array(path)[np.array(inds_to_be_removed)]
-                for node in inds:
-                    path1 = find_radial_path_2(graph2, node)
+                            dist = 0 # reset cumulative distance
+            if len(nodes_to_be_removed) > 0:
+                nodes = np.array(path)[np.array(nodes_to_be_removed)] # select nodes to be removed from path
+                for node in nodes:
+                    path1 = find_radial_path_2(graph2, node) # find radial path that starts with current node
                     for n in path1:
+                        # compute distance between nodes that are upstream and downstream from current node:
                         successors = graph2.successors(n)
                         for successor in successors:
                             if graph2[n][successor]['edge_type'] == 'channel':
@@ -312,17 +315,20 @@ def remove_high_density_nodes(graph1, min_dist, max_dist):
                         x2 = graph2.nodes[n_predecessor]['x']
                         y2 = graph2.nodes[n_predecessor]['y']
                         cl_dist = ((x2-x1)**2 + (y2-y1)**2)**0.5
-                        if cl_dist < max_dist:
+                        # only remove node if distance between neighboring nodes along centerline is not too large:
+                        if cl_dist < max_dist: 
                             graph2.remove_node(n)
                             if node in graph2.graph['start_nodes']:
                                 graph2.graph['start_nodes'].remove(n)
                         else:
                             break
+                # reconnect nodes along every centerline that has been affected by node removal:
                 for cln in range(cl_number, graph1.graph['number_of_centerlines']):
                     reconnect_nodes_along_centerline(graph1, graph2, cln)
     return graph2
 
 def plot_graph(graph, ax):
+    """function for plotting channel line graphs (does not work with polygon graphs)"""
     cmap = plt.get_cmap("tab10")
     for node in np.arange(graph.graph['number_of_centerlines']):
         path = find_longitudinal_path(graph, node)
