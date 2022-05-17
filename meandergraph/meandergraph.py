@@ -12,11 +12,21 @@ from shapely.geometry import Polygon, MultiPolygon, Point, MultiLineString, Line
 from shapely.geometry.polygon import LinearRing
 from shapely.ops import snap, unary_union
 import random
-
+from copy import deepcopy
 
 def find_next_index(x1, y1, x2, y2, p, q, ind1):
-    # find index 'ind2' of the next point on the next centerline (which is defined by (x2, y2)), 
-    # if the current index is 'ind1' on centerline (x1, y1)
+    """ find index 'ind2' of the next point on the next curve (which is defined by (x2, y2)), 
+    # if the current index is 'ind1' on curve (x1, y1)
+    parameters:
+    x1 - x-coordinates of first curve
+    y1 - y-coordinates of first curve
+    x2 - x-coordinates of second curve
+    y2 - y-coordinates of second curve
+    p - correlation indices for first curve
+    q - correlation indices for second curve
+    ind1 - index of point of interest in first curve
+    returns:
+    ind2 - index of correlated point in second curve"""
     p_index = np.where(p == ind1)[0] # find the location where 'p' equals 'ind1'
     p_index = int(np.median(p_index)) # have to choose only one if there are more than one
     ind2 = q[p_index] # find the equivalent index in 'q'
@@ -30,10 +40,16 @@ def correlate_curves(x1,x2,y1,y2):
     D, wp = dtw(C=sm) # dynamic time warping
     p = wp[:,0] # correlation indices for first curve
     q = wp[:,1] # correlation indices for second curve
-#     return {'p': p, 'q': q}
     return p, q
 
 def correlate_set_of_curves(X, Y):
+    """correlate a set of curves defined by x and y coordinates stored as two lists X and Y
+    parameters:
+    X - list of x coordinate arrays
+    Y - list of y coordinate arrays
+    returns:
+    P - lists of indices of correlated successive pairs of curves (for first curve)
+    Q - lists of indices of correlated successive pairs of curves (for second curve)"""
     P = []
     Q = []
     for i in trange(len(X) - 1):
@@ -238,11 +254,9 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, remove_cutof
             graph.graph['start_nodes'].remove(node)
     return graph
 
-from copy import deepcopy
-
 def reconnect_nodes_along_centerline(graph1, graph2, cl_number):
     # function for reconnecting nodes along a centerline in graph2, based on nodes along the same centerline in graph1
-    path = mg.find_longitudinal_path(graph1, cl_number)
+    path = find_longitudinal_path(graph1, cl_number)
     cl_nodes = []
     for node in path:
         if node in graph2:
@@ -250,38 +264,58 @@ def reconnect_nodes_along_centerline(graph1, graph2, cl_number):
     for i in range(len(cl_nodes) - 1):
         if (cl_nodes[i], cl_nodes[i+1]) not in graph2.edges:
             graph2.add_edge(cl_nodes[i], cl_nodes[i+1], edge_type = 'channel')
+
+def compute_derivatives(x, y):
+    """function for computing first derivatives of a curve (centerline)
+    x,y are cartesian coodinates of the curve
+    outputs:
+    dx - first derivative of x coordinate
+    dy - first derivative of y coordinate
+    ds - distances between consecutive points along the curve
+    s - cumulative distance along the curve"""
+    dx = np.diff(x) # first derivatives
+    dy = np.diff(y)   
+    ds = np.sqrt(dx**2+dy**2)
+    s = np.hstack((0,np.cumsum(ds)))
+    return dx, dy, ds, s
             
 def remove_high_density_nodes(graph1, min_dist, max_dist):
+    """function for removing nodes and edges where radial lines are too dense (especially after cutoffs)
+    example usage:
+    graph = mg.remove_high_density_nodes(graph, min_dist = 10, max_dist = 30)"""
     graph2 = deepcopy(graph1)
     for cl_number in trange(graph1.graph['number_of_centerlines']):
-        path = mg.find_longitudinal_path(graph2, cl_number)
+        path = find_longitudinal_path(graph2, cl_number)
+        # compute distances between nodes along centerline (we need only 'ds')
         dx, dy, ds, s = compute_derivatives(graph2.graph['x'][path], graph2.graph['y'][path])
-        small_inds = np.where(ds < min_dist)[0]
-        inds_to_be_removed = []
+        small_inds = np.where(ds < min_dist)[0] # indices of distances that are too small
+        nodes_to_be_removed = [] # for storing nodes that need to be removed
         if len(small_inds) > 0:
-            if small_inds[0] != 0:
-                small_inds = np.hstack((0, small_inds))
+            if small_inds[0] != 0: 
+                small_inds = np.hstack((0, small_inds)) # add first index
             if small_inds[-1] != len(ds) - 1:
-                small_inds = np.hstack((small_inds, len(ds) - 1))
-            inds1 = np.where(np.diff(small_inds)>1)[0] + 1
+                small_inds = np.hstack((small_inds, len(ds) - 1)) # add last index
+            inds1 = np.where(np.diff(small_inds)>1)[0] + 1 # indices where new segments with short distances start
             inds2 = inds1-1
-            inds2 = inds2[1:]
+            inds2 = inds2[1:] # indices where segments with short distances end
             for i in range(len(inds2)):
                 if inds1[i] == inds2[i]: # if there is only one node that needs to be removed 
-                    inds_to_be_removed.append(small_inds[inds1[i]])
+                    nodes_to_be_removed.append(small_inds[inds1[i]])
                 else:
-                    dist = 0
+                    dist = 0 # cumulative distance along nodes
+                    # for each continuous segment with short distances:
                     for small_ind in range(small_inds[inds1[i]]+1, small_inds[inds2[i]]+1):
                         dist += ds[small_ind]
                         if dist < min_dist:
-                            inds_to_be_removed.append(small_ind)
+                            nodes_to_be_removed.append(small_ind)
                         else:
-                            dist = 0
-            if len(inds_to_be_removed) > 0:
-                inds = np.array(path)[np.array(inds_to_be_removed)]
-                for node in inds:
-                    path1 = mg.find_radial_path_2(graph2, node)
+                            dist = 0 # reset cumulative distance
+            if len(nodes_to_be_removed) > 0:
+                nodes = np.array(path)[np.array(nodes_to_be_removed)] # select nodes to be removed from path
+                for node in nodes:
+                    path1 = find_radial_path_2(graph2, node) # find radial path that starts with current node
                     for n in path1:
+                        # compute distance between nodes that are upstream and downstream from current node:
                         successors = graph2.successors(n)
                         for successor in successors:
                             if graph2[n][successor]['edge_type'] == 'channel':
@@ -295,17 +329,20 @@ def remove_high_density_nodes(graph1, min_dist, max_dist):
                         x2 = graph2.nodes[n_predecessor]['x']
                         y2 = graph2.nodes[n_predecessor]['y']
                         cl_dist = ((x2-x1)**2 + (y2-y1)**2)**0.5
-                        if cl_dist < max_dist:
+                        # only remove node if distance between neighboring nodes along centerline is not too large:
+                        if cl_dist < max_dist: 
                             graph2.remove_node(n)
                             if node in graph2.graph['start_nodes']:
                                 graph2.graph['start_nodes'].remove(n)
                         else:
                             break
+                # reconnect nodes along every centerline that has been affected by node removal:
                 for cln in range(cl_number, graph1.graph['number_of_centerlines']):
                     reconnect_nodes_along_centerline(graph1, graph2, cln)
     return graph2
 
 def plot_graph(graph, ax):
+    """function for plotting channel line graphs (does not work with polygon graphs)"""
     cmap = plt.get_cmap("tab10")
     for node in np.arange(graph.graph['number_of_centerlines']):
         path = find_longitudinal_path(graph, node)
@@ -372,6 +409,17 @@ def create_polygon_graph(graph):
                     y4 = graph.nodes[outer_poly_boundary[1]]['y']
                     y5 = graph.nodes[outer_poly_boundary[0]]['y']
                     coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x5, y5), (x1, y1)]
+                # this does not work and I am not sure why at this point:
+                # if len(outer_poly_boundary) == 4: # 4 nodes on the outer boundary
+                #     x3 = graph.nodes[outer_poly_boundary[3]]['x']
+                #     x4 = graph.nodes[outer_poly_boundary[2]]['x']
+                #     x5 = graph.nodes[outer_poly_boundary[1]]['x']
+                #     x6 = graph.nodes[outer_poly_boundary[0]]['x']
+                #     y3 = graph.nodes[outer_poly_boundary[3]]['y']
+                #     y4 = graph.nodes[outer_poly_boundary[2]]['y']
+                #     y5 = graph.nodes[outer_poly_boundary[1]]['y']
+                #     y6 = graph.nodes[outer_poly_boundary[0]]['x']
+                #     coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x5, y5), (x6, y6), (x1, y1)]
                 if len(coords) > 0:
                     poly = Polygon(LinearRing(coords))
                     if poly.is_valid: # add node only if polygon is valid
@@ -598,21 +646,51 @@ def polygon_width_and_length(graph, node):
             length_2 = compute_distance(x2, x3, y2, y3)
     return 0.5*(width_1 + width_2), 0.5*(length_1 + length_2)
 
-def plot_migration_rate_map(wbar, graph, vmin, vmax, dt, saved_ts, ax):
+def add_curvature_to_line_graph(graph, smoothing_factor):
+    n_centerlines = graph.graph['number_of_centerlines']
+    curvs = []
+    for cline in range(0, n_centerlines):
+        path = find_longitudinal_path(graph, cline)
+        curv = mp.compute_curvature(graph.graph['x'][path], graph.graph['y'][path])
+        curv = savgol_filter(curv, smoothing_factor, 2)
+        count = 0
+        for node in path:
+            graph.nodes[node]['curv'] = curv[count]
+            count += 1
+    for node in graph.nodes:
+        if 'curv' not in graph.nodes[node].keys():
+            graph.nodes[node]['curv'] = 0
+
+def plot_migration_rate_map(wbar, graph1, graph2, vmin, vmax, dt, saved_ts, ax):
+    if wbar.scrolls[-1].bank == 'left':
+        graph = graph2
+    if wbar.scrolls[-1].bank == 'right':
+        graph = graph1
     norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
     m = mpl.cm.ScalarMappable(norm=norm, cmap='viridis')
     time_step = (dt * saved_ts)/(365*24*60*60)
     for node in tqdm(wbar.bar_graph.nodes):
         width, length = polygon_width_and_length(graph, node)
-        ax.add_patch(PolygonPatch(wbar.bar_graph.nodes[node]['poly'], facecolor=m.to_rgba(length/time_step), 
+        ax.add_patch(PolygonPatch(wbar.bar_graph.nodes[node]['poly'], facecolor = m.to_rgba(length/time_step), 
                                   edgecolor='k', linewidth=0.25))
 
-def plot_curvature_map(wbar, graph, vmin, vmax, W, ax):
+def plot_curvature_map(wbar, graph1, graph2, vmin, vmax, W, ax):
+    if wbar.scrolls[-1].bank == 'left':
+        graph = graph2
+    if wbar.scrolls[-1].bank == 'right':
+        graph = graph1
     norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
     m = mpl.cm.ScalarMappable(norm=norm, cmap='RdBu')
     for node in wbar.bar_graph.nodes:
             ax.add_patch(PolygonPatch(wbar.bar_graph.nodes[node]['poly'], 
-                facecolor=m.to_rgba(W*graph.nodes[node]['curv']), edgecolor='none', linewidth=0.3))
+                facecolor=m.to_rgba(W * graph.nodes[node]['curv']), edgecolor='k', linewidth=0.25))
+
+def plot_age_map(wbar, vmin, vmax, W, ax):
+    norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+    m = mpl.cm.ScalarMappable(norm=norm, cmap='viridis')
+    for node in wbar.bar_graph.nodes:
+            ax.add_patch(PolygonPatch(wbar.bar_graph.nodes[node]['poly'], 
+                facecolor=m.to_rgba(wbar.bar_graph.nodes[node]['age']), edgecolor='k', linewidth=0.25))
 
     
 def compute_distance(x1, x2, y1, y2):
@@ -801,11 +879,10 @@ def create_scrolls_and_find_connected_scrolls(graph, W, cutoff_area, ax):
                 ax.add_patch(PolygonPatch(scrolls[i], facecolor=color, edgecolor='k'))
     return scrolls, scroll_ages, all_bars_graph, cutoffs
 
-def create_and_plot_bar_graphs(graph1, graph2, ts, all_bars_graph, scrolls, scroll_ages, cutoffs, dt, X, Y, W, saved_ts, ax):
+def create_polygon_graphs_and_bar_graphs(graph1, graph2, ts, all_bars_graph, scrolls, scroll_ages, cutoffs, dt, X, Y, W, saved_ts, ax):
     # create polygon graphs for the banks:
     poly_graph_1 = create_polygon_graph(graph1)
     poly_graph_2 = create_polygon_graph(graph2)
-    
     # create list of Bar objects:
     wbars = []
     count = 0
@@ -814,13 +891,25 @@ def create_and_plot_bar_graphs(graph1, graph2, ts, all_bars_graph, scrolls, scro
         wbar = Bar(count, [])
         ages = []
         for i in component:
-            # number, age, polygon, bar, small_polygons
-            wbar.scrolls.append(Scroll(i, scroll_ages[i], scrolls[i], wbar, [])) 
+            # if current scroll intersects the right bank of the same age:
+            if scrolls[i].buffer(1.0).intersects(LineString(np.vstack((X1[scroll_ages[i]], Y1[scroll_ages[i]])).T)):
+                bank = 'right'
+            else:
+                bank = 'left'
+            wbar.scrolls.append(Scroll(i, scroll_ages[i], bank, scrolls[i], wbar, [])) 
             ages.append(scroll_ages[i])
         wbar.create_polygon() # create bar polygon
         wbars.append(wbar)
         max_ages.append(max(ages))
+    # add polygon graphs to bars:
+    for i in range(len(wbars)):
+        if wbars[i].scrolls[-1].bank == 'right':
+            wbars[i].add_polygon_graphs(poly_graph_1)
+        if wbars[i].scrolls[-1].bank == 'left':
+            wbars[i].add_polygon_graphs(poly_graph_2)   
+    return wbars, poly_graph_1, poly_graph_2
 
+def plot_bar_graphs(graph1, graph2, wbars, ts, cutoffs, dt, X, Y, W, saved_ts, vmin, vmax, plot_type, ax):
     # collect cutoff indices
     cutoff_inds = []
     count = 0
@@ -828,20 +917,14 @@ def create_and_plot_bar_graphs(graph1, graph2, ts, all_bars_graph, scrolls, scro
         if len(cf) > 0:
             cutoff_inds.append(count)
         count += 1
-
-    # plotting:        
-    count = 0
+    # plotting cutoffs:     
     for wbar in wbars:
-        r = random.random()
-        b = random.random()
-        g = random.random()
-        color = (r, g, b, 0.5) # random color for each bar
-        wbar.plot(ax, color)
+        ages = []
+        for scroll in wbar.scrolls:
+            ages.append(scroll.age)
         for i in cutoff_inds: # cutoffs need to be plotted at the right time
-            if max_ages[count] + 1 == i:
+            if max(ages) + 1 == i:
                 ax.add_patch(PolygonPatch(cutoffs[i][0], facecolor='lightblue', edgecolor='k'))
-        count += 1
-
     # create polygon for most recent channel and plot it:
     xm, ym = mp.get_channel_banks(X[ts-1], Y[ts-1], W)
     coords = []
@@ -850,53 +933,15 @@ def create_and_plot_bar_graphs(graph1, graph2, ts, all_bars_graph, scrolls, scro
     coords.append((xm[0], ym[0]))
     ch = Polygon(LinearRing(coords))
     ax.add_patch(PolygonPatch(ch, facecolor='lightblue', edgecolor='k'))
-
-    bars_accounted_for = []
-    count = 0
+    # add polygon graphs to bars and plot them:
     for i in range(len(wbars)):
-        lb_boundary_length = wbars[i].polygon.buffer(1).intersection(LineString(coords[:int(len(coords)/2)])).length
-        if lb_boundary_length > 500:
-            wbars[i].add_polygon_graphs(poly_graph_1)
-            plot_migration_rate_map(wbars[i], graph1, 0, 40, dt, saved_ts, ax)
-            bars_accounted_for.append(i)
-        rb_boundary_length = wbars[i].polygon.buffer(1).intersection(LineString(coords[int(len(coords)/2):])).length
-        if rb_boundary_length > 500:
-            wbars[i].add_polygon_graphs(poly_graph_2)
-            plot_migration_rate_map(wbars[i], graph2, 0, 40, dt, saved_ts, ax)
-            bars_accounted_for.append(i)
-
-    for cf_ind in cutoff_inds:
-        path1 = find_longitudinal_path(graph1, cf_ind)
-        path2 = find_longitudinal_path(graph2, cf_ind)
-        coords1 = []
-        coords2 = []
-        for node in path1:
-            coords1.append((graph1.nodes[node]['x'], graph1.nodes[node]['y']))
-        for node in path2:
-            coords2.append((graph2.nodes[node]['x'], graph2.nodes[node]['y']))
-        for i in range(len(wbars)):
-            if i not in bars_accounted_for:
-                if wbars[i].polygon.buffer(1).intersection(LineString(coords1)).length > 500:
-                    bars_accounted_for.append(i)
-                    wbars[i].add_polygon_graphs(poly_graph_1)
-                    plot_migration_rate_map(wbars[i], graph1, 0, 40, dt, saved_ts, ax)
-
-    for cf_ind in cutoff_inds:
-        path1 = find_longitudinal_path(graph1, cf_ind)
-        path2 = find_longitudinal_path(graph2, cf_ind)
-        coords1 = []
-        coords2 = []
-        for node in path1:
-            coords1.append((graph1.nodes[node]['x'], graph1.nodes[node]['y']))
-        for node in path2:
-            coords2.append((graph2.nodes[node]['x'], graph2.nodes[node]['y']))
-        for i in range(len(wbars)):
-            if i not in bars_accounted_for:
-                if wbars[i].polygon.buffer(1).intersection(LineString(coords2)).length > 500:
-                    bars_accounted_for.append(i)
-                    wbars[i].add_polygon_graphs(poly_graph_2)
-                    plot_migration_rate_map(wbars[i], graph2, 0, 40, dt, saved_ts, ax)
-    return wbars, poly_graph_1, poly_graph_2
+        if plot_type == 'migration':
+            plot_migration_rate_map(wbars[i], graph1, graph2, vmin, vmax, dt, saved_ts, ax)
+        if plot_type == 'curvature':
+            plot_curvature_map(wbars[i], graph1, graph2, vmin, vmax, W, ax)
+        if plot_type == 'age':
+            plot_age_map(wbars[i], vmin, vmax, W, ax)
+    plt.axis('equal');
 
 def create_simple_polygon_graph(bank_graph, X):
     graph = nx.DiGraph(number_of_centerlines = bank_graph.graph['number_of_centerlines']) # directed graph
@@ -1008,6 +1053,14 @@ def create_simple_polygon_graph(bank_graph, X):
             else:
                 graph.nodes[node_1]['poly'] = None
     return graph
+
+def plot_bars_by_bar_number(wbars, ax):
+    for wbar in wbars:
+        r = random.random()
+        b = random.random()
+        g = random.random()
+        color = (r, g, b, 0.5) # random color for each bar
+        wbar.plot(ax, color)
 
 # from: https://www.geeksforgeeks.org/direction-point-line-segment/
 def directionOfPoint(xa, ya, xb, yb, xp, yp):
@@ -1172,9 +1225,10 @@ class Bar:
         self.merged_polygons = polys
 
 class Scroll:
-    def __init__(self, number, age, polygon, bar, small_polygons):
+    def __init__(self, number, age, bank, polygon, bar, small_polygons):
         self.number = number
         self.age = age
+        self.bank = bank # left or right bank
         self.polygon = polygon
         self.bar = bar
         self.small_polygons = small_polygons
