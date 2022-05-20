@@ -777,7 +777,7 @@ def plot_migration_rate_map(wbar, graph1, graph2, vmin, vmax, dt, saved_ts, ax):
     norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
     m = mpl.cm.ScalarMappable(norm=norm, cmap='viridis')
     time_step = (dt * saved_ts)/(365*24*60*60)
-    for node in tqdm(wbar.bar_graph.nodes):
+    for node in wbar.bar_graph.nodes:
         width = wbar.bar_graph.nodes[node]['width']
         length = wbar.bar_graph.nodes[node]['length']
         ax.add_patch(PolygonPatch(wbar.bar_graph.nodes[node]['poly'], facecolor = m.to_rgba(length/time_step), 
@@ -1003,7 +1003,7 @@ def create_polygon_graphs_and_bar_graphs(graph1, graph2, all_bars_graph, scrolls
         wbar = Bar(count, [])
         for i in component:
             # if current scroll intersects the right bank of the same age:
-            if scrolls[i].buffer(1.0).intersects(LineString(np.vstack((X[scroll_ages[i]], Y[scroll_ages[i]])).T)):
+            if scrolls[i].buffer(1.0).intersects(LineString(np.vstack((X1[scroll_ages[i]], Y1[scroll_ages[i]])).T)):
                 bank = 'right'
             else:
                 bank = 'left'
