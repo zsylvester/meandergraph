@@ -373,17 +373,27 @@ def create_polygon_graph(graph):
                 if graph[node_2][n]['edge_type'] == 'radial':
                     node_3 = n
             if (not node_3) & (i < len(path) - 2):
-                node_2 = path[i+2]
-                node_2_children = list(graph.successors(node_2))
-                for n in node_2_children:
-                    if graph[node_2][n]['edge_type'] == 'radial':
-                        node_3 = n
+                count = 2
+                while node_3 is False:
+                    node_2 = path[i+count]
+                    node_2_children = list(graph.successors(node_2))
+                    for n in node_2_children:
+                        if graph[node_2][n]['edge_type'] == 'radial':
+                            node_3 = n
+                        else:
+                            count+=1
+            if (not node_4) & (i < len(path) - 2):
+                node_3_children = list(graph.successors(node_3))
+                for n in node_3_children:
+                    if graph[node_3][n]['edge_type'] == 'channel':
+                        node_4 = n
             if node_3 and node_4: # only add a new polygon if there is another centerline
                 coords = []
                 x1 = graph.nodes[node_1]['x']
                 x2 = graph.nodes[node_2]['x']
                 y1 = graph.nodes[node_1]['y']
                 y2 = graph.nodes[node_2]['y']
+                width_1 = compute_distance(x1, x2, y1, y2)
                 try:
                     outer_poly_boundary = nx.shortest_path(graph, source=node_4, target=node_3)
                 except: # if there is no path between node 4 and node 3
@@ -401,6 +411,9 @@ def create_polygon_graph(graph):
                     y3 = graph.nodes[node_3]['y']
                     y4 = graph.nodes[node_4]['y']
                     coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x1, y1)]
+                    width_2 = compute_distance(x3, x4, y3, y4)
+                    length_1 = compute_distance(x1, x4, y1, y4)
+                    length_2 = compute_distance(x2, x3, y2, y3)
                 if len(outer_poly_boundary) == 3: # 3 nodes on the outer boundary
                     x3 = graph.nodes[outer_poly_boundary[2]]['x']
                     x4 = graph.nodes[outer_poly_boundary[1]]['x']
@@ -409,30 +422,53 @@ def create_polygon_graph(graph):
                     y4 = graph.nodes[outer_poly_boundary[1]]['y']
                     y5 = graph.nodes[outer_poly_boundary[0]]['y']
                     coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x5, y5), (x1, y1)]
-                # this does not work and I am not sure why at this point:
-                # if len(outer_poly_boundary) == 4: # 4 nodes on the outer boundary
-                #     x3 = graph.nodes[outer_poly_boundary[3]]['x']
-                #     x4 = graph.nodes[outer_poly_boundary[2]]['x']
-                #     x5 = graph.nodes[outer_poly_boundary[1]]['x']
-                #     x6 = graph.nodes[outer_poly_boundary[0]]['x']
-                #     y3 = graph.nodes[outer_poly_boundary[3]]['y']
-                #     y4 = graph.nodes[outer_poly_boundary[2]]['y']
-                #     y5 = graph.nodes[outer_poly_boundary[1]]['y']
-                #     y6 = graph.nodes[outer_poly_boundary[0]]['x']
-                #     coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x5, y5), (x6, y6), (x1, y1)]
+                    width_2 = compute_distance(x3, x4, y3, y4) + compute_distance(x4, x5, y4, y5)
+                    length_1 = compute_distance(x1, x5, y1, y5)
+                    length_2 = compute_distance(x2, x3, y2, y3)              
+                if len(outer_poly_boundary) == 4: # 4 nodes on the outer boundary
+                    x3 = graph.nodes[outer_poly_boundary[3]]['x']
+                    x4 = graph.nodes[outer_poly_boundary[2]]['x']
+                    x5 = graph.nodes[outer_poly_boundary[1]]['x']
+                    x6 = graph.nodes[outer_poly_boundary[0]]['x']
+                    y3 = graph.nodes[outer_poly_boundary[3]]['y']
+                    y4 = graph.nodes[outer_poly_boundary[2]]['y']
+                    y5 = graph.nodes[outer_poly_boundary[1]]['y']
+                    y6 = graph.nodes[outer_poly_boundary[0]]['y']
+                    coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x5, y5), (x6, y6), (x1, y1)]
+                    width_2 = compute_distance(x3, x4, y3, y4) + compute_distance(x4, x5, y4, y5) + compute_distance(x5, x6, y5, y6)
+                    length_1 = compute_distance(x1, x6, y1, y6)
+                    length_2 = compute_distance(x2, x3, y2, y3)
+                if len(outer_poly_boundary) == 5: # 5 nodes on the outer boundary
+                    x3 = graph.nodes[outer_poly_boundary[4]]['x']
+                    x4 = graph.nodes[outer_poly_boundary[3]]['x']
+                    x5 = graph.nodes[outer_poly_boundary[2]]['x']
+                    x6 = graph.nodes[outer_poly_boundary[1]]['x']
+                    x7 = graph.nodes[outer_poly_boundary[0]]['x']
+                    y3 = graph.nodes[outer_poly_boundary[4]]['y']
+                    y4 = graph.nodes[outer_poly_boundary[3]]['y']
+                    y5 = graph.nodes[outer_poly_boundary[2]]['y']
+                    y6 = graph.nodes[outer_poly_boundary[1]]['y']
+                    y7 = graph.nodes[outer_poly_boundary[0]]['y']
+                    coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x5, y5), (x6, y6), (x7, y7), (x1, y1)]
+                    width_2 = compute_distance(x3, x4, y3, y4) + compute_distance(x4, x5, y4, y5) + compute_distance(x5, x6, y5, y6) + compute_distance(x6, x7, y6, y7)
+                    length_1 = compute_distance(x1, x7, y1, y7)
+                    length_2 = compute_distance(x2, x3, y2, y3)
                 if len(coords) > 0:
                     poly = Polygon(LinearRing(coords))
+                    width = 0.5*(width_1 + width_2)
+                    length = 0.5*(length_1 + length_2)
+
                     if poly.is_valid: # add node only if polygon is valid
-                        poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1)
+                        poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1, length = length, width = width)
                     else:
                         poly = poly.buffer(0) # fix the invalid polygon
-                        poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1)
+                        poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1, length = length, width = width)
                     if i == 0:
                         if poly.is_valid:
                             cl_start_nodes.append(path[i])
                         else:
                             poly = poly.buffer(0) # fix the invalid polygon
-                            poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1)
+                            poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1, length = length, width = width)
                             cl_start_nodes.append(path[i])
             else: 
                 if i == 0: # something is needed at the beginning of the centerline even when there is no 'node_3' or 'node_4', so we just make up a polygon
@@ -444,9 +480,8 @@ def create_polygon_graph(graph):
                     poly = Polygon(LinearRing(coords))
                     if not poly.is_valid: # fix poly
                         poly = poly.buffer(0) # fix the invalid polygon
-                    poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1)
+                    poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1, length = length, width = width)
                     cl_start_nodes.append(path[i])
-
         for i in range(len(path) - 2): # add graph edges
             if (path[i] in poly_graph) & (path[i+1] in poly_graph):
                 poly_graph.add_edge(path[i], path[i+1], edge_type = 'channel')
@@ -591,7 +626,7 @@ def one_step_difference_no_plot(ch1, ch2, cutoff_area):
     ch1 = ch1.buffer(eps, 1, join_style=JOIN_STYLE.mitre).buffer(-eps, 1, join_style=JOIN_STYLE.mitre)
     return ch1, bar, erosion, jump, cutoffs
 
-def polygon_width_and_length(graph, node):
+def polygon_width_and_length(graph, node): #this could be removed, len/width calculated and stored as polygon attributes create_polygon_graph()
     path = find_longitudinal_path(graph, node)
     node_1 = node
     width_1 = 0
@@ -610,12 +645,19 @@ def polygon_width_and_length(graph, node):
         for n in node_2_children:
             if graph[node_2][n]['edge_type'] == 'radial':
                 node_3 = n
+
         if (not node_3) & (len(path) > 2):
             node_2 = path[2]
             node_2_children = list(graph.successors(node_2))
             for n in node_2_children:
                 if graph[node_2][n]['edge_type'] == 'radial':
                     node_3 = n
+
+        if (not node_4) & (len(path) > 2):
+                        node_3_children = list(graph.successors(node_3))
+                        for n in node_3_children:
+                            if graph[node_3][n]['edge_type'] == 'channel':
+                                node_4 = n
         coords = []
         x1 = graph.nodes[node_1]['x']
         x2 = graph.nodes[node_2]['x']
@@ -670,7 +712,8 @@ def plot_migration_rate_map(wbar, graph1, graph2, vmin, vmax, dt, saved_ts, ax):
     m = mpl.cm.ScalarMappable(norm=norm, cmap='viridis')
     time_step = (dt * saved_ts)/(365*24*60*60)
     for node in tqdm(wbar.bar_graph.nodes):
-        width, length = polygon_width_and_length(graph, node)
+        width = wbar.bar_graph.nodes[node]['width']
+        length = wbar.bar_graph.nodes[node]['length']
         ax.add_patch(PolygonPatch(wbar.bar_graph.nodes[node]['poly'], facecolor = m.to_rgba(length/time_step), 
                                   edgecolor='k', linewidth=0.25))
 
@@ -691,7 +734,6 @@ def plot_age_map(wbar, vmin, vmax, W, ax):
     for node in wbar.bar_graph.nodes:
             ax.add_patch(PolygonPatch(wbar.bar_graph.nodes[node]['poly'], 
                 facecolor=m.to_rgba(wbar.bar_graph.nodes[node]['age']), edgecolor='k', linewidth=0.25))
-
     
 def compute_distance(x1, x2, y1, y2):
     dist = ((x2 - x1)**2 + (y2 - y1)**2)**0.5
@@ -852,18 +894,19 @@ def create_scrolls_and_find_connected_scrolls(graph, W, cutoff_area, ax):
         count += 1
 
     connections = []
-    for i in trange(1, len(bars)):
-        for j in range(n_scrolls[i]):
-            for k in range(n_scrolls[i-1]):
-                if (type(bars[i-1]) == MultiPolygon) & (type(bars[i]) == MultiPolygon):
-                    if bars[i-1][k].buffer(1.0).overlaps(bars[i][j]):
-                        connections.append((sum(n_scrolls[:i]) + j, sum(n_scrolls[:i-1]) + k))
-                if (type(bars[i-1]) == Polygon) & (type(bars[i]) == MultiPolygon):
-                    if bars[i-1].buffer(1.0).overlaps(bars[i][j]):
-                        connections.append((sum(n_scrolls[:i]) + j, sum(n_scrolls[:i-1]) + 1))
-                if (type(bars[i-1]) == MultiPolygon) & (type(bars[i]) == Polygon):
-                    if bars[i-1][k].buffer(1.0).overlaps(bars[i]):
-                        connections.append((sum(n_scrolls[:i]) + 1, sum(n_scrolls[:i-1]) + k))
+    for n in range(1,10): #outer loop used for fluctuations of centerlines to ensure they are part of the same 'bar'
+        for i in trange(1, len(bars)):
+            for j in range(n_scrolls[i]):
+                for k in range(n_scrolls[i-n]):
+                    if (type(bars[i-n]) == MultiPolygon) & (type(bars[i]) == MultiPolygon):
+                        if bars[i-n][k].buffer(1.0).overlaps(bars[i][j]):
+                            connections.append((sum(n_scrolls[:i]) + j, sum(n_scrolls[:i-n]) + k))
+                    if (type(bars[i-n]) == Polygon) & (type(bars[i]) == MultiPolygon):
+                        if bars[i-n].buffer(1.0).overlaps(bars[i][j]):
+                            connections.append((sum(n_scrolls[:i]) + j, sum(n_scrolls[:i-n]) + 1))
+                    if (type(bars[i-n]) == MultiPolygon) & (type(bars[i]) == Polygon):
+                        if bars[i-n][k].buffer(1.0).overlaps(bars[i]):
+                            connections.append((sum(n_scrolls[:i]) + 1, sum(n_scrolls[:i-n]) + k))
 
     all_bars_graph = nx.Graph()
     for i in range(len(connections)):
@@ -877,7 +920,7 @@ def create_scrolls_and_find_connected_scrolls(graph, W, cutoff_area, ax):
         for i in component:
             if scrolls[i].area > 1.0:
                 ax.add_patch(PolygonPatch(scrolls[i], facecolor=color, edgecolor='k'))
-    return scrolls, scroll_ages, all_bars_graph, cutoffs
+    return scrolls, scroll_ages, cutoffs, all_bars_graph
 
 def create_polygon_graphs_and_bar_graphs(graph1, graph2, ts, all_bars_graph, scrolls, scroll_ages, cutoffs, dt, X, Y, W, saved_ts, ax):
     # create polygon graphs for the banks:
@@ -892,7 +935,7 @@ def create_polygon_graphs_and_bar_graphs(graph1, graph2, ts, all_bars_graph, scr
         ages = []
         for i in component:
             # if current scroll intersects the right bank of the same age:
-            if scrolls[i].buffer(1.0).intersects(LineString(np.vstack((X1[scroll_ages[i]], Y1[scroll_ages[i]])).T)):
+            if scrolls[i].buffer(1.0).intersects(LineString(np.vstack((X[scroll_ages[i]], Y[scroll_ages[i]])).T)):
                 bank = 'right'
             else:
                 bank = 'left'
@@ -1151,6 +1194,8 @@ class Bar:
                                 poly = self.polygon.intersection(graph.nodes[node]['poly'])
                             else:
                                 poly = self.polygon.intersection(graph.nodes[node]['poly'].buffer(0))
+                            if graph.nodes[node]['poly'].difference(scroll.polygon).area > 0: #accounting for intra-point bar erosion
+                                poly = scroll.polygon.intersection(graph.nodes[node]['poly'])
                             if poly.area > 0:
                                 nodes.append(node)
                                 polys.append(poly)
