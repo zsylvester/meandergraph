@@ -681,68 +681,6 @@ def one_step_difference_no_plot(ch1, ch2, cutoff_area):
     ch1 = ch1.buffer(eps, 1, join_style=JOIN_STYLE.mitre).buffer(-eps, 1, join_style=JOIN_STYLE.mitre)
     return ch1, bar, erosion, jump, cutoffs
 
-def polygon_width_and_length(graph, node): #this could be removed, len/width calculated and stored as polygon attributes create_polygon_graph()
-    path = find_longitudinal_path(graph, node)
-    node_1 = node
-    width_1 = 0
-    width_2 = 0
-    length_1 = 0
-    length_2 = 0
-    if len(path) > 1:
-        node_2 = path[1]
-        node_1_children = list(graph.successors(node_1))
-        node_2_children = list(graph.successors(node_2))
-        node_3 = False
-        node_4 = False
-        for n in node_1_children:
-            if graph[node_1][n]['edge_type'] == 'radial':
-                node_4 = n
-        for n in node_2_children:
-            if graph[node_2][n]['edge_type'] == 'radial':
-                node_3 = n
-
-        if (not node_3) & (len(path) > 2):
-            node_2 = path[2]
-            node_2_children = list(graph.successors(node_2))
-            for n in node_2_children:
-                if graph[node_2][n]['edge_type'] == 'radial':
-                    node_3 = n
-
-        if (not node_4) & (len(path) > 2):
-                        node_3_children = list(graph.successors(node_3))
-                        for n in node_3_children:
-                            if graph[node_3][n]['edge_type'] == 'channel':
-                                node_4 = n
-        coords = []
-        x1 = graph.nodes[node_1]['x']
-        x2 = graph.nodes[node_2]['x']
-        y1 = graph.nodes[node_1]['y']
-        y2 = graph.nodes[node_2]['y']
-        width_1 = compute_distance(x1, x2, y1, y2)
-        try:
-            outer_poly_boundary = nx.shortest_path(graph, source=node_4, target=node_3)
-        except: # if there is no path between node 4 and node 3
-            outer_poly_boundary = []
-        if len(outer_poly_boundary) == 2: # 2 nodes on the outer boundary
-            x3 = graph.nodes[node_3]['x']
-            x4 = graph.nodes[node_4]['x']
-            y3 = graph.nodes[node_3]['y']
-            y4 = graph.nodes[node_4]['y']
-            width_2 = compute_distance(x3, x4, y3, y4)
-            length_1 = compute_distance(x1, x4, y1, y4)
-            length_2 = compute_distance(x2, x3, y2, y3)
-        if len(outer_poly_boundary) == 3: # 3 nodes on the outer boundary
-            x3 = graph.nodes[outer_poly_boundary[2]]['x']
-            x4 = graph.nodes[outer_poly_boundary[1]]['x']
-            x5 = graph.nodes[outer_poly_boundary[0]]['x']
-            y3 = graph.nodes[outer_poly_boundary[2]]['y']
-            y4 = graph.nodes[outer_poly_boundary[1]]['y']
-            y5 = graph.nodes[outer_poly_boundary[0]]['y']
-            width_2 = compute_distance(x3, x4, y3, y4) + compute_distance(x4, x5, y4, y5)
-            length_1 = compute_distance(x1, x5, y1, y5)
-            length_2 = compute_distance(x2, x3, y2, y3)
-    return 0.5*(width_1 + width_2), 0.5*(length_1 + length_2)
-
 def add_curvature_to_line_graph(graph, smoothing_factor):
     n_centerlines = graph.graph['number_of_centerlines']
     curvs = []
