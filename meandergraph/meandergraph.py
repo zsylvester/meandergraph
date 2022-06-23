@@ -403,11 +403,14 @@ def create_polygon_graph(graph):
                 while node_3 is False:
                     node_2 = path[i+count]
                     node_2_children = list(graph.successors(node_2))
-                    for n in node_2_children:
-                        if graph[node_2][n]['edge_type'] == 'radial':
-                            node_3 = n
-                        else:
-                            count+=1
+                    if len(node_2_children) > 0:
+                        for n in node_2_children:
+                            if graph[node_2][n]['edge_type'] == 'radial':
+                                node_3 = n
+                            else:
+                                count+=1
+                    else:
+                        break
             if (not node_4) & (i < len(path) - 2):
                 node_3_children = list(graph.successors(node_3))
                 for n in node_3_children:
@@ -415,6 +418,7 @@ def create_polygon_graph(graph):
                         node_4 = n
             if node_3 and node_4: # only add a new polygon if there is another centerline
                 coords = []
+                poly1 = False
                 x1 = graph.nodes[node_1]['x']
                 x2 = graph.nodes[node_2]['x']
                 y1 = graph.nodes[node_1]['y']
@@ -436,7 +440,17 @@ def create_polygon_graph(graph):
                     x4 = graph.nodes[node_4]['x']
                     y3 = graph.nodes[node_3]['y']
                     y4 = graph.nodes[node_4]['y']
-                    coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x1, y1)]
+                    line1 = LineString([[x1, y1], [x2, y2]])
+                    line2 = LineString([[x3, y3], [x4, y4]])
+                    if line1.intersects(line2):
+                        x0 = line1.intersection(line2).x
+                        y0 = line1.intersection(line2).y
+                        coords = [(x1, y1), (x0, y0), (x4, y4)]
+                        poly1 = Polygon(LinearRing(coords))
+                        coords = [(x0, y0), (x3, y3), (x2, y2)]
+                        poly2 = Polygon(LinearRing(coords))
+                    else:
+                        coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x1, y1)]
                     width_2 = compute_distance(x3, x4, y3, y4)
                     length_1 = compute_distance(x1, x4, y1, y4)
                     length_2 = compute_distance(x2, x3, y2, y3)
@@ -447,7 +461,18 @@ def create_polygon_graph(graph):
                     y3 = graph.nodes[outer_poly_boundary[2]]['y']
                     y4 = graph.nodes[outer_poly_boundary[1]]['y']
                     y5 = graph.nodes[outer_poly_boundary[0]]['y']
-                    coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x5, y5), (x1, y1)]
+                    line1 = LineString([[x1, y1], [x2, y2]])
+                    line2 = LineString([[x3, y3], [x4, y4]])
+                    line3 = LineString([[x4, y4], [x5, y5]])
+                    if line1.intersects(line3):
+                        x0 = line1.intersection(line3).x
+                        y0 = line1.intersection(line3).y
+                        coords = [(x1, y1), (x0, y0), (x5, y5)]
+                        poly1 = Polygon(LinearRing(coords))
+                        coords = [(x0, y0), (x2, y2), (x3, y3), (x4, y4)]
+                        poly2 = Polygon(LinearRing(coords))
+                    else:
+                        coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x5, y5), (x1, y1)]
                     width_2 = compute_distance(x3, x4, y3, y4) + compute_distance(x4, x5, y4, y5)
                     length_1 = compute_distance(x1, x5, y1, y5)
                     length_2 = compute_distance(x2, x3, y2, y3)              
@@ -480,7 +505,10 @@ def create_polygon_graph(graph):
                     length_1 = compute_distance(x1, x7, y1, y7)
                     length_2 = compute_distance(x2, x3, y2, y3)
                 if len(coords) > 0:
-                    poly = Polygon(LinearRing(coords))
+                    if not poly1:
+                        poly = Polygon(LinearRing(coords))
+                    else:
+                        poly = MultiPolygon((poly1, poly2))
                     width = 0.5*(width_1 + width_2)
                     length = 0.5*(length_1 + length_2)
 
@@ -572,6 +600,84 @@ def plot_bars2(graph, cutoff_area, ax, W):
     for i in trange(ts-1):
         ch1 = create_channel_polygon(X[i], Y[i], W)
         ch2 = create_channel_polygon(X[i+1], Y[i+1], W)
+        ch1, bar, erosion, jump, cutoff = one_step_difference_no_plot(ch1, ch2, cutoff_area)
+        chs.append(ch1)
+        jumps.append(jump)
+        for cf in cutoff:
+            if type(cf) == MultiPolygon:
+                cutoff.remove(cf)
+        cutoffs.append(cutoff)
+    chs.append(ch2) # append last channel
+    # creating list of merged channels
+    for i in trange(ts): # create list of merged channels
+        if i == 0: 
+            all_ch = chs[ts-1]
+        else:
+            all_ch = all_ch.union(chs[ts-i])
+        all_chs.append(all_ch)
+    # creating scroll bars and plotting
+    for i in trange(ts): # create scroll bars
+        bar = chs[i].difference(all_chs[ts-i-1]) # scroll bar defined by difference
+        bars.append(bar)
+        color = cmap(i/float(ts))
+        if type(bar) != Polygon:
+            for b in bar:
+                if MultiPolygon(cutoffs[i]).is_valid: # sometimes this is invalid
+                    if not b.intersects(MultiPolygon(cutoffs[i])):
+                        ax.add_patch(PolygonPatch(b,facecolor=color,edgecolor='k'))
+                else:
+                    ax.add_patch(PolygonPatch(b,facecolor=color,edgecolor='k'))
+            else:
+                ax.add_patch(PolygonPatch(bar, facecolor=color, edgecolor='k'))
+    return bars, chs, all_chs, jumps, cutoffs
+
+def create_channel_polygon_2(x1, y1, x2, y2):
+    xm = np.hstack((x1,x2[::-1]))
+    ym = np.hstack((y1,y2[::-1]))
+    coords = []
+    for i in range(len(xm)):
+        coords.append((xm[i], ym[i]))
+    ch = Polygon(LinearRing(coords))
+    if not ch.is_valid:
+        ch = ch.buffer(0)
+    return ch
+
+def plot_bars3(graph1, graph2, cutoff_area, ax):
+    """function for creating polygons for 'scroll' bars from channel bankline data and plotting them
+    parameters:
+    graph - centerline graph
+    cutoff_area - maximum continuous area (created through channel bank movement in one timestep) that is still considered a bar and not a cutoff
+    ax - axis for plotting
+    W - channel width
+    returns:
+    bars - list of shapely multipolygons representing 'scroll' bars that result from channel migration during one timestep
+    chs - list of shapely polygons that represent channels through time
+    all_chs - list of shapely polygons that represent merged channels through time
+    jumps - sometimes there is a gap between two consecutive channels and these gaps are collected into a list of polygons
+    cutoffs - list of shapely polygons that represent cutoffs """
+    n_centerlines = graph1.graph['number_of_centerlines']
+    X1 = []
+    Y1 = []
+    X2 = []
+    Y2 = []
+    for node in np.arange(n_centerlines):
+        path = find_longitudinal_path(graph1, node)
+        X1.append(graph1.graph['x'][path])
+        Y1.append(graph1.graph['y'][path])
+        path = find_longitudinal_path(graph2, node)
+        X2.append(graph2.graph['x'][path])
+        Y2.append(graph2.graph['y'][path])
+    ts = len(X1)
+    bars = [] # these are 'scroll' bars - shapely MultiPolygon objects that correspond to one time step
+    chs = [] # list of channels - shapely Polygon objects
+    jumps = [] # gaps between channel polygons that are not cutoffs
+    all_chs = [] # list of merged channels (to be used for erosion)
+    cutoffs = []
+    cmap = mpl.cm.get_cmap('viridis')
+    # creating list of channels, jumps, and cutoffs
+    for i in trange(ts-1):
+        ch1 = create_channel_polygon_2(X1[i], Y1[i], X2[i], Y2[i])
+        ch2 = create_channel_polygon_2(X1[i+1], Y1[i+1], X2[i+1], Y2[i+1])
         ch1, bar, erosion, jump, cutoff = one_step_difference_no_plot(ch1, ch2, cutoff_area)
         chs.append(ch1)
         jumps.append(jump)
@@ -718,8 +824,9 @@ def plot_migration_rate_map(wbar, graph1, graph2, vmin, vmax, dt, saved_ts, ax):
     for node in wbar.bar_graph.nodes:
         width = wbar.bar_graph.nodes[node]['width']
         length = wbar.bar_graph.nodes[node]['length']
-        ax.add_patch(PolygonPatch(wbar.bar_graph.nodes[node]['poly'], facecolor = m.to_rgba(length/time_step), 
-                                  edgecolor='k', linewidth=0.25))
+        if type(wbar.bar_graph.nodes[node]['poly']) == Polygon:
+            ax.add_patch(PolygonPatch(wbar.bar_graph.nodes[node]['poly'], facecolor = m.to_rgba(length/time_step), 
+                                      edgecolor='k', linewidth=0.25))
 
 def plot_curvature_map(wbar, graph1, graph2, vmin, vmax, W, ax):
     if wbar.scrolls[-1].bank == 'left':
@@ -729,6 +836,7 @@ def plot_curvature_map(wbar, graph1, graph2, vmin, vmax, W, ax):
     norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
     m = mpl.cm.ScalarMappable(norm=norm, cmap='viridis')
     for node in wbar.bar_graph.nodes:
+        if type(wbar.bar_graph.nodes[node]['poly']) == Polygon:
             ax.add_patch(PolygonPatch(wbar.bar_graph.nodes[node]['poly'], 
                 facecolor=m.to_rgba(W * np.abs(graph.nodes[node]['curv'])), edgecolor='k', linewidth=0.25))
 
@@ -864,11 +972,14 @@ def plot_bar_lines(wbar, graph1, graph2, ax):
                         ax.plot(x1, y1, color=cmap(1), linewidth=0.5)
     ax.add_patch(PolygonPatch(wbar.polygon, facecolor='none', edgecolor='k', linewidth = 2, zorder = 10000))
 
-def create_scrolls_and_find_connected_scrolls(graph, W, cutoff_area, ax):
+# def create_scrolls_and_find_connected_scrolls(graph, W, cutoff_area, ax):
+def create_scrolls_and_find_connected_scrolls(graph1, graph2, cutoff_area, ax):
     # create scrolls
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
-    bars, chs, all_chs, jumps, cutoffs = plot_bars2(graph, cutoff_area, ax1, W)
+    # bars, chs, all_chs, jumps, cutoffs = plot_bars2(graph, cutoff_area, ax1, W)
+    bars, chs, all_chs, jumps, cutoffs = plot_bars3(graph1, graph2, cutoff_area, ax1)
+
     plt.close(fig)
 
     # remove cutoffs from list of scrolls of same age:
@@ -930,7 +1041,7 @@ def create_scrolls_and_find_connected_scrolls(graph, W, cutoff_area, ax):
                 ax.add_patch(PolygonPatch(scrolls[i], facecolor=color, edgecolor='k'))
     return scrolls, scroll_ages, cutoffs, all_bars_graph
 
-def create_polygon_graphs_and_bar_graphs(graph1, graph2, all_bars_graph, scrolls, scroll_ages, cutoffs, X1, Y1, min_area, ax):
+def create_polygon_graphs_and_bar_graphs(graph1, graph2, all_bars_graph, scrolls, scroll_ages, cutoffs, X1, Y1, X2, Y2, min_area, ax):
     # create polygon graphs for the banks:
     poly_graph_1 = create_polygon_graph(graph1)
     poly_graph_2 = create_polygon_graph(graph2)
@@ -941,23 +1052,31 @@ def create_polygon_graphs_and_bar_graphs(graph1, graph2, all_bars_graph, scrolls
         wbar = Bar(count, [])
         for i in component:
             # if current scroll intersects the right bank of the same age:
+            if scrolls[i].buffer(1.0).intersects(LineString(np.vstack((X2[scroll_ages[i]], Y2[scroll_ages[i]])).T)):
+                bank = 'left'
             if scrolls[i].buffer(1.0).intersects(LineString(np.vstack((X1[scroll_ages[i]], Y1[scroll_ages[i]])).T)):
                 bank = 'right'
-            else:
-                bank = 'left'
             wbar.scrolls.append(Scroll(i, scroll_ages[i], bank, scrolls[i], wbar, [])) 
         wbar.create_polygon() # create bar polygon
         if wbar.polygon.area > min_area:
             wbars.append(wbar)
+            count += 1
     # add polygon graphs to bars:
     for i in trange(len(wbars)):
-        if wbars[i].scrolls[-1].bank == 'right':
+        n_right_banks = 0
+        n_left_banks = 0
+        for scroll in wbars[i].scrolls:
+            if scroll.bank == 'left':
+                n_left_banks += 1
+            if scroll.bank == 'right':
+                n_right_banks += 1
+        if n_right_banks > n_left_banks:
             wbars[i].add_polygon_graphs(poly_graph_1)
-        if wbars[i].scrolls[-1].bank == 'left':
+        else:
             wbars[i].add_polygon_graphs(poly_graph_2)   
     return wbars, poly_graph_1, poly_graph_2
 
-def plot_bar_graphs(graph1, graph2, wbars, ts, cutoffs, dt, X, Y, W, saved_ts, vmin, vmax, plot_type, ax):
+def plot_bar_graphs(graph1, graph2, wbars, ts, cutoffs, dt, X1, Y1, X2, Y2, W, saved_ts, vmin, vmax, plot_type, ax):
     # collect cutoff indices
     cutoff_inds = []
     count = 0
@@ -974,12 +1093,13 @@ def plot_bar_graphs(graph1, graph2, wbars, ts, cutoffs, dt, X, Y, W, saved_ts, v
             if max(ages) + 1 == i:
                 ax.add_patch(PolygonPatch(cutoffs[i][0], facecolor='lightblue', edgecolor='k'))
     # create polygon for most recent channel and plot it:
-    xm, ym = mp.get_channel_banks(X[ts-1], Y[ts-1], W)
-    coords = []
-    for i in range(len(xm)):
-        coords.append((xm[i],ym[i]))
-    coords.append((xm[0], ym[0]))
-    ch = Polygon(LinearRing(coords))
+    # xm, ym = mp.get_channel_banks(X[ts-1], Y[ts-1], W)
+    # coords = []
+    # for i in range(len(xm)):
+    #     coords.append((xm[i],ym[i]))
+    # coords.append((xm[0], ym[0]))
+    # ch = Polygon(LinearRing(coords))
+    ch = create_channel_polygon_2(X1[-1], Y1[-1], X2[-1], Y2[-1])
     ax.add_patch(PolygonPatch(ch, facecolor='lightblue', edgecolor='k'))
     # add polygon graphs to bars and plot them:
     for i in trange(len(wbars)):
