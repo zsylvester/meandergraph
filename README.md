@@ -26,7 +26,7 @@ This is *work in progress*.
 
 ## Getting started
 
-See the [Segment_every_grain.ipynb](https://github.com/zsylvester/segmenteverygrain/blob/main/segmenteverygrain/Segment_every_grain.ipynb) notebook for an example of how the models can be loaded and used for segmenting an image and QC-ing the result.
+See the [meandergraph_Mamore_banks_simple_example.ipynb](https://github.com/zsylvester/meandergraph/blob/main/meandergraph/meandergraph_Mamore_banks_simple_example.ipynb) notebook for an example of how the models can be loaded and used for segmenting an image and QC-ing the result.
 
 ## License
 
