@@ -1,10 +1,10 @@
 # meandergraph
 
-<img src="https://github.com/zsylvester/meandergraph/blob/main/meander_graph_1.svg" width="600">
+<img src="https://github.com/zsylvester/meandergraph/blob/main/meander_graph_1.svg" width="800">
 
 ## Description
 
-'meandergraph' is a Python module that relies on graphs to describe, analyze, and visualize the migration of meanedring channels.
+'meandergraph' is a Python module that relies on graphs to describe, analyze, and visualize the migration of meandering channels.
 
 This is *work in progress*.
 
