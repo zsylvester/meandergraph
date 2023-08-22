@@ -527,7 +527,7 @@ def remove_high_density_nodes(graph1, min_dist, max_dist):
                     reconnect_nodes_along_centerline(graph1, graph2, cln)
     return graph2
 
-def plot_graph(graph, ax):
+def plot_graph(graph, ax, show_nodes = False, label_nodes = False):
     """
     Plot channel line graphs (does not work with polygon graphs)
 
@@ -536,6 +536,10 @@ def plot_graph(graph, ax):
     graph : directed graph
         Graph to be plotted.
     ax : figure axes
+    show_nodes : boolean (Optional)
+                 Display the nodes as a point on the graph.
+    label_nodes: boolean (Optional)
+                 Display the node numbers as text on the graph.
     """
 
     cmap = plt.get_cmap("tab10")
@@ -545,6 +549,14 @@ def plot_graph(graph, ax):
     for node in graph.graph['start_nodes']:
         path, path_ages = find_radial_path(graph, node)
         ax.plot(graph.graph['x'][path], graph.graph['y'][path], '-', color = cmap(1), linewidth = 0.5)
+    if show_nodes == True or label_nodes == True:
+        for node in np.arange(graph.graph['number_of_centerlines']):
+            path = find_longitudinal_path(graph, node)
+            for path_node in path:
+                if show_nodes == True:
+                    ax.plot(graph.graph['x'][path_node], graph.graph['y'][path_node], '.k', markersize = 1.0)
+                if label_nodes == True:
+                    ax.text(graph.graph['x'][path_node], graph.graph['y'][path_node], str(path_node))
     plt.axis('equal')
         
 def create_polygon_graph(graph):
@@ -954,6 +966,153 @@ def get_channel_banks(x,y,W):
     ym = np.hstack((y1,y2[::-1]))
     return xm, ym
 
+### cms adds get_elapsed_time()
+def get_elapsed_time(dates_list):
+    """
+    Make a list whose elements coincide with the amount of time between the input dates.
+
+    Parameters
+    ----------
+
+    dates_list : 1D list
+                 Date of each centerline. Dates should be datetime object.
+
+    Returns
+    -------
+    elapsed_times : 1D list
+                    The amount of time between successive centerlines (non-constant 'dt'); 
+                    values are fractions of a year.
+    """
+    elapsed_times = []
+    for i in range(len(list_of_dates)-1):
+        elapsed_time = abs(list_of_dates[i]-list_of_dates[i+1]).days
+        elapsed_times.append(elapsed_time/365)
+    return elapsed_times
+
+### cms add find_cutoff_ages()
+def find_cutoff_ages(graph):
+    """
+    Find the timestep corresponding to cutoff event(s).
+
+    Parameters
+    ----------
+    graph : directed graph
+            Centerline graph with cutoffs.
+    
+    Returns
+    -------
+    cutoff_ages : 1D array
+                  Timestep during which a cutoff occurred.
+    """
+
+    cutoff_node_ages = []
+    for node in graph.graph['cutoff_nodes']:
+        try:
+            cutoff_node_ages.append(graph.nodes[node]['age'])
+        except:
+            pass
+    cutoff_ages = np.unique(cutoff_node_ages)
+    return cutoff_ages
+
+### cms add plot_chosen_radial_paths(graph, X, Y, P, Q, cutoff_index, num_paths):
+def plot_chosen_radial_paths(graph, X, Y, P, Q, num_paths, cutoff_index = False):
+    """
+    Produce a plot along a primary radial path for a user-specified region of the graph.
+
+    Parameters
+    ----------
+    graph : directed graph
+            Centerline graph.
+    X : list
+        x coordinates of lines.
+    Y : list
+        y coordinates of lines.
+    P : list
+        Arrays of indices of correlated successive pairs of curves (for first curve).
+    Q : list
+        Arrays of indices of correlated successive pairs of curves (for second curve)
+    num_paths : int
+                The number of desired primary radial paths.
+    cutoff_index = int (Optional)
+                   Number corresponding to the cutoff year. 
+    """
+
+    from matplotlib.widgets import Cursor
+
+    fig,ax = plt.subplots()
+    plot_graph(graph, ax, show_nodes = False, label_nodes = False)
+    
+    #user clicks location where they want a primary radial path
+    cursor = Cursor(ax, useblit=True, color='k', linewidth=1)
+    zoom_ok = False
+    print('\nZoom or pan to view, \npress spacebar when ready to click:\n')
+    while not zoom_ok:
+        zoom_ok = plt.waitforbuttonpress()
+    user_loc = plt.ginput(n=num_paths)
+    plt.close(fig)
+
+    #find the x,y and centerline number for the nearest to the point that has been clicked
+    from scipy import signal, spatial
+    
+    last_cl_points = np.vstack((X[-1], Y[-1])).T # coordinates of last centerlines
+    tree = spatial.KDTree(last_cl_points)
+    
+    X_flip, Y_flip, P_flip, Q_flip = np.flip(X), np.flip(Y), np.flip(P), np.flip(Q)
+
+    user_indices = []
+    user_xs = []
+    user_ys = []
+    for i in range(len(user_loc)):
+        user_ind = tree.query(user_loc[i])[1]
+        indices, x, y = find_indices(user_ind, X_flip, Y_flip, Q_flip, P_flip)
+        user_indices.append(indices)
+        user_xs.append(x)
+        user_ys.append(y)    
+    
+    #calculate migration rate (distance)
+    user_dists = []
+    for inds in range(len(user_indices)):
+        dist = []
+        for i in range(len(user_indices[inds])-1):
+            dist.append(((user_xs[inds][i]-user_xs[inds][i+1])**2 + (user_ys[inds][i]-user_ys[inds][i+1])**2)**0.5)
+        user_dists.append(dist)
+    
+    #find the maximum for scaling the y-axis
+    max_dist = 0
+    for item in user_dists:
+        for dist in item:
+            if dist>max_dist:
+                max_dist = dist
+            else:
+                dist+=1
+
+    #define color scheme
+    colors = plt.cm.inferno(np.linspace(0, 1, num_paths))
+    
+    #create plot of graph with the paths drawn and colored
+    fig, ax = plt.subplots(figsize=(20,15))
+    plot_graph(graph, ax, show_nodes = False, label_nodes = False)
+    for i in range(num_paths):
+        ax.plot(user_xs[i], user_ys[i], 'o', color=colors[i], markersize = 3)
+    ax.axis('equal')
+    
+    #create plot of migration rate vs age for the chosen paths
+    fig, ax = plt.subplots(figsize=(7,5))
+    for i in range(len(user_dists)):
+        ages = np.arange(len(user_dists[i]))
+        user_dists[i].reverse()
+        
+        # plot the data
+        ax.plot(ages,user_dists[i], color=colors[i])
+        
+    #add the cutoffs years to the plot as vertical lines
+
+    ax.axvline(x=cutoff_index, ymin=0, ymax=len(X), color='gray', linestyle='--')
+
+    ax.set_xlabel('Time (year)')
+    ax.set_ylabel('Migration Rate (m/yr)')
+    ax.set_ylim(0, max_dist+1)
+
 def plot_bars_from_banks(graph1, graph2, cutoff_area, ax):
     """
     Create polygons for 'scroll' bars from channel bankline data and plotting them.
@@ -1229,8 +1388,7 @@ def plot_age_map(wbar, vmin, vmax, W, ax):
                 ax.fill(poly.exterior.xy[0], poly.exterior.xy[1], 
                     facecolor = m.to_rgba(wbar.bar_graph.nodes[node]['age']), 
                     edgecolor='k', linewidth=0.25)
-
-    
+  
 def compute_distance(x1, x2, y1, y2):
     dist = ((x2 - x1)**2 + (y2 - y1)**2)**0.5
     return dist
