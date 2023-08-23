@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
 from scipy.signal import savgol_filter
-from scipy.spatial import distance
+from scipy.spatial import distance, KDTree
 from scipy import interpolate
 from librosa.sequence import dtw
 from tqdm import trange, tqdm
@@ -300,7 +300,6 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, remove_cutof
     graph : directed graph
         Graph that contains all the center- or bank lines and radial lines.
     """
-
     graph = nx.DiGraph(number_of_centerlines = len(X)) # directed graph to store nodes and edges
     cl_indices = [] # list of lists to store *centerline* indices that will be part of the graph
     n_centerlines = len(X)
@@ -573,6 +572,10 @@ def create_polygon_graph(graph):
     poly_graph : directed graph
         Graph with polygons at its nodes.
     """
+    # add directionality to nodes
+    graph = add_edge_directions_to_bank_graph(graph)
+
+    # create polygon graph
     poly_graph = nx.DiGraph()
     cl_start_nodes = []
     age = 0
@@ -966,153 +969,6 @@ def get_channel_banks(x,y,W):
     ym = np.hstack((y1,y2[::-1]))
     return xm, ym
 
-### cms adds get_elapsed_time()
-def get_elapsed_time(dates_list):
-    """
-    Make a list whose elements coincide with the amount of time between the input dates.
-
-    Parameters
-    ----------
-
-    dates_list : 1D list
-                 Date of each centerline. Dates should be datetime object.
-
-    Returns
-    -------
-    elapsed_times : 1D list
-                    The amount of time between successive centerlines (non-constant 'dt'); 
-                    values are fractions of a year.
-    """
-    elapsed_times = []
-    for i in range(len(list_of_dates)-1):
-        elapsed_time = abs(list_of_dates[i]-list_of_dates[i+1]).days
-        elapsed_times.append(elapsed_time/365)
-    return elapsed_times
-
-### cms add find_cutoff_ages()
-def find_cutoff_ages(graph):
-    """
-    Find the timestep corresponding to cutoff event(s).
-
-    Parameters
-    ----------
-    graph : directed graph
-            Centerline graph with cutoffs.
-    
-    Returns
-    -------
-    cutoff_ages : 1D array
-                  Timestep during which a cutoff occurred.
-    """
-
-    cutoff_node_ages = []
-    for node in graph.graph['cutoff_nodes']:
-        try:
-            cutoff_node_ages.append(graph.nodes[node]['age'])
-        except:
-            pass
-    cutoff_ages = np.unique(cutoff_node_ages)
-    return cutoff_ages
-
-### cms add plot_chosen_radial_paths(graph, X, Y, P, Q, cutoff_index, num_paths):
-def plot_chosen_radial_paths(graph, X, Y, P, Q, num_paths, cutoff_index = False):
-    """
-    Produce a plot along a primary radial path for a user-specified region of the graph.
-
-    Parameters
-    ----------
-    graph : directed graph
-            Centerline graph.
-    X : list
-        x coordinates of lines.
-    Y : list
-        y coordinates of lines.
-    P : list
-        Arrays of indices of correlated successive pairs of curves (for first curve).
-    Q : list
-        Arrays of indices of correlated successive pairs of curves (for second curve)
-    num_paths : int
-                The number of desired primary radial paths.
-    cutoff_index = int (Optional)
-                   Number corresponding to the cutoff year. 
-    """
-
-    from matplotlib.widgets import Cursor
-
-    fig,ax = plt.subplots()
-    plot_graph(graph, ax, show_nodes = False, label_nodes = False)
-    
-    #user clicks location where they want a primary radial path
-    cursor = Cursor(ax, useblit=True, color='k', linewidth=1)
-    zoom_ok = False
-    print('\nZoom or pan to view, \npress spacebar when ready to click:\n')
-    while not zoom_ok:
-        zoom_ok = plt.waitforbuttonpress()
-    user_loc = plt.ginput(n=num_paths)
-    plt.close(fig)
-
-    #find the x,y and centerline number for the nearest to the point that has been clicked
-    from scipy import signal, spatial
-    
-    last_cl_points = np.vstack((X[-1], Y[-1])).T # coordinates of last centerlines
-    tree = spatial.KDTree(last_cl_points)
-    
-    X_flip, Y_flip, P_flip, Q_flip = np.flip(X), np.flip(Y), np.flip(P), np.flip(Q)
-
-    user_indices = []
-    user_xs = []
-    user_ys = []
-    for i in range(len(user_loc)):
-        user_ind = tree.query(user_loc[i])[1]
-        indices, x, y = find_indices(user_ind, X_flip, Y_flip, Q_flip, P_flip)
-        user_indices.append(indices)
-        user_xs.append(x)
-        user_ys.append(y)    
-    
-    #calculate migration rate (distance)
-    user_dists = []
-    for inds in range(len(user_indices)):
-        dist = []
-        for i in range(len(user_indices[inds])-1):
-            dist.append(((user_xs[inds][i]-user_xs[inds][i+1])**2 + (user_ys[inds][i]-user_ys[inds][i+1])**2)**0.5)
-        user_dists.append(dist)
-    
-    #find the maximum for scaling the y-axis
-    max_dist = 0
-    for item in user_dists:
-        for dist in item:
-            if dist>max_dist:
-                max_dist = dist
-            else:
-                dist+=1
-
-    #define color scheme
-    colors = plt.cm.inferno(np.linspace(0, 1, num_paths))
-    
-    #create plot of graph with the paths drawn and colored
-    fig, ax = plt.subplots(figsize=(20,15))
-    plot_graph(graph, ax, show_nodes = False, label_nodes = False)
-    for i in range(num_paths):
-        ax.plot(user_xs[i], user_ys[i], 'o', color=colors[i], markersize = 3)
-    ax.axis('equal')
-    
-    #create plot of migration rate vs age for the chosen paths
-    fig, ax = plt.subplots(figsize=(7,5))
-    for i in range(len(user_dists)):
-        ages = np.arange(len(user_dists[i]))
-        user_dists[i].reverse()
-        
-        # plot the data
-        ax.plot(ages,user_dists[i], color=colors[i])
-        
-    #add the cutoffs years to the plot as vertical lines
-
-    ax.axvline(x=cutoff_index, ymin=0, ymax=len(X), color='gray', linestyle='--')
-
-    ax.set_xlabel('Time (year)')
-    ax.set_ylabel('Migration Rate (m/yr)')
-    ax.set_ylim(0, max_dist+1)
-
 def plot_bars_from_banks(graph1, graph2, cutoff_area, ax):
     """
     Create polygons for 'scroll' bars from channel bankline data and plotting them.
@@ -1342,18 +1198,29 @@ def add_curvature_to_line_graph(graph, smoothing_factor):
         if 'curv' not in graph.nodes[node].keys():
             graph.nodes[node]['curv'] = np.nan
 
-def add_polygon_width_and_length(wbars, graph1, graph2):
-    for wbar in tqdm(wbars):
-        if wbar.scrolls[-1].bank == 'left':
-            graph = graph2
-        if wbar.scrolls[-1].bank == 'right':
-            graph = graph1
-        for node in wbar.bar_graph.nodes:
-            width, length = polygon_width_and_length(graph, node)
-            wbar.bar_graph.nodes[node]['width'] = width
-            wbar.bar_graph.nodes[node]['length'] = length
-
 def plot_migration_rate_map(wbar, graph1, graph2, vmin, vmax, dt, saved_ts, ax):
+    """
+    Make a spatial plot of migration rate.
+
+    Parameters
+    ----------
+    wbar : bar object
+    graph1 : directed graph
+        Graph of center- or banklines.
+    graph2 : directed graph
+        Graph of center- or banklines.
+    vmin : float
+        Minimum value of migration rate (for scaling)
+    vmax : float
+        Maximum value of migration rate (for scaling)
+    dt : float
+        Timestep value
+    saved_ts: int
+        Number of timesteps to save; E.g. saved_ts = 1 would correspond to every timestep
+    ax : int
+        Axes for plotting
+    """
+
     if wbar.scrolls[-1].bank == 'left':
         graph = graph2
     if wbar.scrolls[-1].bank == 'right':
@@ -1369,9 +1236,27 @@ def plot_migration_rate_map(wbar, graph1, graph2, vmin, vmax, dt, saved_ts, ax):
                 facecolor = m.to_rgba(length/time_step * wbar.bar_graph.nodes[node]['direction']), 
                 edgecolor='k', linewidth=0.25)
 
-def plot_curvature_map(wbar, vmin, vmax, W, cmap, ax):
+def plot_curvature_map(wbar, vmin, vmax, W, ax):
+    """
+    Make a spatial plot of curvature.
+
+    Parameters
+    ----------
+    wbar : bar object
+    vmin : float
+        Minimum value of curvature (for scaling)
+    vmax : float
+        Maximum value of curvature (for scaling)
+    W : int/float
+        Width (meters)
+    cmap: str 
+        Matplotlib cmap object
+    ax : int
+        Axes for plotting
+    """
+
     norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
-    m = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
+    m = mpl.cm.ScalarMappable(norm=norm, cmap='Reds')
     for node in wbar.bar_graph.nodes:
         if type(wbar.bar_graph.nodes[node]['poly']) == Polygon:
             ax.fill(wbar.bar_graph.nodes[node]['poly'].exterior.xy[0], 
@@ -1379,7 +1264,24 @@ def plot_curvature_map(wbar, vmin, vmax, W, cmap, ax):
                     facecolor = m.to_rgba(W * wbar.bar_graph.nodes[node]['curv']), 
                     edgecolor='k', linewidth=0.25)
 
-def plot_age_map(wbar, vmin, vmax, W, ax):
+def plot_age_map(wbar, vmin, vmax, ax):
+    """
+    Make a spatial plot of age.
+
+    Parameters
+    ----------
+    wbar : 'bar' object
+    vmin : float
+        Minimum value of age (for scaling)
+    vmax : float
+        Maximum value of age (for scaling)
+    W : int/float
+        Width (meters)
+    cmap: str 
+        Matplotlib cmap object
+    ax : int
+        Axes for plotting
+    """
     norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
     m = mpl.cm.ScalarMappable(norm=norm, cmap='viridis')
     for node in wbar.bar_graph.nodes:
@@ -1388,12 +1290,49 @@ def plot_age_map(wbar, vmin, vmax, W, ax):
                 ax.fill(poly.exterior.xy[0], poly.exterior.xy[1], 
                     facecolor = m.to_rgba(wbar.bar_graph.nodes[node]['age']), 
                     edgecolor='k', linewidth=0.25)
-  
+ 
 def compute_distance(x1, x2, y1, y2):
+    """
+    Compute the distance between two nodes.
+
+    Parameters
+    ----------
+    x1 : 1D array
+        x-coordinates of first bank.
+    y1 : 1D array
+        y-coordinates of first bank.
+    x2 : 1D array
+        x-coordinates of second bank.
+    y2 : 1D array
+        y-coordinates of second bank.
+
+    Returns
+    -------
+    dist : flaot
+        Distance (meters)
+    """
+
     dist = ((x2 - x1)**2 + (y2 - y1)**2)**0.5
     return dist
 
 def find_next_node(graph, start_node):
+    """
+    Find the next node along radial path.
+
+    Parameters
+    ----------
+    graph : directed graph
+        Graph with radial paths defined.
+
+    start_node : int
+        Node that is the starting point of radial path.
+
+    Returns
+    -------
+    nodes : list 
+        List of nodes along radial path
+    """
+
     nodes = [start_node]
     while len(list(graph.successors(start_node))) > 0:
         next_node = list(graph.successors(start_node))[0]
@@ -1402,6 +1341,24 @@ def find_next_node(graph, start_node):
     return nodes
 
 def merge_polygons(graph, nodes, sparse_inds, polys):
+    """
+    Merge polygons.
+
+    Parameters
+    ----------
+    graph : directed graph
+        Bar graph; graph containing bar objects
+    sparse_inds : list 
+        List of sparse indicies
+    polys : list
+        List of shapely polygons
+        
+    Returns
+    -------
+    polys : list 
+        List of merged polygons
+    """
+
     inds = np.arange(len(nodes))
     poly = graph.nodes[nodes[0]]['poly']
     for i in range(len(sparse_inds)-1):
@@ -1414,6 +1371,23 @@ def merge_polygons(graph, nodes, sparse_inds, polys):
     return polys
 
 def find_sparse_inds(graph, nodes, min_area):
+    """
+    Make a list of sparse indicies.
+
+    Parameters
+    ----------
+    graph : directed graph
+        Bar graph; graph containing bar objects
+    nodes : list 
+        List of nodes
+    min_area : float
+        Minimum allowable area of a shapely polygon
+        
+    Returns
+    -------
+    sparse_inds : list
+        List of sparse indices
+    """
     areas = []
     for node in nodes:
         area = graph.nodes[node]['poly'].area
@@ -1429,6 +1403,16 @@ def find_sparse_inds(graph, nodes, min_area):
     return sparse_inds
 
 def add_sparse_cutoff_nodes(graph, min_dist):
+    """
+    Add a sparse_cutoff_nodes attribute to bar graph.
+
+    Parameters
+    ----------
+    graph : directed graph
+        Bar graph; graph containing bar objects
+    min_dist:
+        Minimum allowable distance between nodes (meters)
+    """
     cutoff_node_ages = []
     for node in graph.graph['cutoff_nodes']:
         cutoff_node_ages.append(graph.nodes[node]['age'])
@@ -1458,6 +1442,19 @@ def add_sparse_cutoff_nodes(graph, min_dist):
     graph.graph['sparse_cutoff_nodes'] = sparse_cutoff_nodes
 
 def plot_bar_lines(wbar, graph1, graph2, ax):
+    """
+    Create a plot of the outline of the bar polygons.
+
+    Parameters
+    ----------
+    wbar : 'bar' object
+    graph1 : directed graph
+        Bar graph for one of the banks
+    graph2 : directed graph
+        Bar graph for one of the banks
+    ax : int
+        Axes for plotting
+    """
     if wbar.scrolls[-1].bank == 'right':
         bank_graph = graph1 
     else:
@@ -1515,6 +1512,29 @@ def plot_bar_lines(wbar, graph1, graph2, ax):
     ax.fill(wbar.polygon.exterior.xy[0], wbar.polygon.exterior.xy[1], facecolor='none', edgecolor='k', linewidth = 2, zorder = 10000)
 
 def create_scrolls_and_find_connected_scrolls(graph1, graph2, cutoff_area):
+    """
+    Make a list of 'scroll' objects and plot them.
+
+    Parameters
+    ----------
+    graph1 : directed graph
+        Bankline graph.
+    graph2 : directed graph
+        Bankline graph.
+    cutoff_area : float
+        Maximum continuous area (created through channel bank movement in one timestep) that is still considered a bar and not a cutoff.
+        
+    Returns
+    -------
+    scrolls : list
+        List of 'scroll' objects
+    scroll_ages : list
+        List of ages corresponding to the 'scroll' objects
+    cutoffs : list
+        Shapely polygons that represent cutoffs.
+    all_bars_graph: directed graph
+        A graph containing all of the 'bar' objects.
+    """
     # create scrolls
     fig = plt.figure()
     ax1 = fig.add_subplot(111)
@@ -1584,6 +1604,44 @@ def create_scrolls_and_find_connected_scrolls(graph1, graph2, cutoff_area):
     return scrolls, scroll_ages, cutoffs, all_bars_graph
 
 def create_polygon_graphs_and_bar_graphs(graph1, graph2, all_bars_graph, scrolls, scroll_ages, cutoffs, X1, Y1, X2, Y2, min_area):
+    """
+    Make a directed graphs that contain shapely polygons representing the banks,
+    and add these graphs to 'bar' objects.
+
+    Parameters
+    ----------
+    graph1 : directed graph
+        Bankline graph.
+    graph2 : directed graph
+        Bankline graph.
+    all_bars_graph: directed graph
+        A graph containing all of the 'bar' objects.
+    scrolls : list
+        List of 'scroll' objects
+    scroll_ages : list
+        List of ages corresponding to the 'scroll' objects
+    cutoffs : list
+        Shapely polygons that represent cutoffs.
+    X1 : list 
+        x coordinate arrays.
+    Y1 : list
+        y coordinate arrays.
+    X2 : list 
+        x coordinate arrays.
+    Y2 : list
+        y coordinate arrays.
+    min_area : float
+        Minimum allowable area of a shapely polygon
+
+    Returns
+    -------
+    wbars : list
+        List of 'bar' objects
+    poly_graph_1 : directed graph
+        Directed graph containing shapely polygons
+    poly_graph_2 : directed_graph
+        Directed graph containing shapely polygons
+    """
     # create polygon graphs for the banks:
     poly_graph_1 = create_polygon_graph(graph1)
     poly_graph_2 = create_polygon_graph(graph2)
@@ -1630,6 +1688,47 @@ def create_polygon_graphs_and_bar_graphs(graph1, graph2, all_bars_graph, scrolls
     return wbars, poly_graph_1, poly_graph_2
 
 def plot_bar_graphs(graph1, graph2, wbars, ts, cutoffs, dt, X1, Y1, X2, Y2, W, saved_ts, vmin, vmax, plot_type, ax):
+    """
+    Make and plot a graph containing 'bar' objects.
+
+    Parameters
+    ----------
+    graph1 : directed graph
+        Polygon graph representing bankline
+    graph2 : directed graph
+         Polygon graph representing bankline
+    wbars : list
+        List of 'bar' objects
+    cutoffs : list
+        Shapely polygons that represent cutoffs.
+    dt : float
+        Timestep
+    X1 : list 
+        x coordinate arrays.
+    Y1 : list
+        y coordinate arrays.
+    X2 : list 
+        x coordinate arrays.
+    Y2 : list
+        y coordinate arrays.
+    W : float
+        Channel width (meters)
+    saved_ts: int
+        Number of timesteps to save; E.g. saved_ts = 1 would correspond to every timestep
+    vmin : float
+        Minimum value of parameter of interest (for scaling)
+    vmax : float
+        Maximum value of parameter of interest (for scaling)
+    plot_type : str
+        Type of plot to product; available options 'migration', 'curvature', 'age'
+    ax : int
+        Axes for plotting
+
+    Returns
+    -------
+    graph : directed graph
+        Bar graph
+    """
     # collect cutoff indices
     cutoff_inds = []
     count = 0
@@ -1647,26 +1746,34 @@ def plot_bar_graphs(graph1, graph2, wbars, ts, cutoffs, dt, X1, Y1, X2, Y2, W, s
                 # ax.add_patch(PolygonPatch(cutoffs[i][0], facecolor='lightblue', edgecolor='k'))
                 ax.fill(cutoffs[i][0].exterior.xy[0], cutoffs[i][0].exterior.xy[1], facecolor='lightblue', edgecolor='k')
     # create polygon for most recent channel and plot it:
-    # xm, ym = mp.get_channel_banks(X[ts-1], Y[ts-1], W)
-    # coords = []
-    # for i in range(len(xm)):
-    #     coords.append((xm[i],ym[i]))
-    # coords.append((xm[0], ym[0]))
-    # ch = Polygon(LinearRing(coords))
     ch = create_channel_polygon_from_banks(X1[-1], Y1[-1], X2[-1], Y2[-1])
-    # ax.add_patch(PolygonPatch(ch, facecolor='lightblue', edgecolor='k'))
     ax.fill(ch.exterior.xy[0], ch.exterior.xy[1], facecolor='lightblue', edgecolor='k')
-    # add polygon graphs to bars and plot them:
+    # add polygon graphs to bars and plot them (based on plot_type):
     for i in trange(len(wbars)):
         if plot_type == 'migration':
             plot_migration_rate_map(wbars[i], graph1, graph2, vmin, vmax, dt, saved_ts, ax)
         if plot_type == 'curvature':
-            plot_curvature_map(wbars[i], graph1, graph2, vmin, vmax, W, ax)
+            plot_curvature_map(wbars[i], vmin, vmax, W, ax)
         if plot_type == 'age':
             plot_age_map(wbars[i], vmin, vmax, ax)
     plt.axis('equal');
 
 def create_simple_polygon_graph(bank_graph, X):
+    """
+    Make a polygon graph consisting of nodes and edges
+
+    Parameters
+    ----------
+    bank_graph : directed graph
+        Bankline graph.
+    X : list 
+        x coordinate arrays.
+
+    Returns
+    -------
+    graph : directed graph
+        Simple polygon graph
+    """
     graph = nx.DiGraph(number_of_centerlines = bank_graph.graph['number_of_centerlines']) # directed graph
     graph.add_nodes_from(bank_graph, node_type = 'channel') # add nodes
     # add radial edges:
@@ -1778,6 +1885,15 @@ def create_simple_polygon_graph(bank_graph, X):
     return graph
 
 def plot_bars_by_bar_number(wbars, ax):
+    """
+    Make a plot of the bar objects. 
+
+    Parameters
+    ----------
+    wbars : list of 'wbar' objects
+    ax : int
+        Axes for plotting
+    """
     for wbar in wbars:
         r = random.random()
         b = random.random()
@@ -1787,6 +1903,28 @@ def plot_bars_by_bar_number(wbars, ax):
 
 # from: https://www.geeksforgeeks.org/direction-point-line-segment/
 def directionOfPoint(xa, ya, xb, yb, xp, yp):
+    """
+    Compute the directionality between two points. 
+
+    Parameters
+    ----------
+    xa : float
+        x coordinate of point 1
+    ya : float
+        y coordinate of point 1
+    xb : float
+        x coordinate of point 2
+    yb : float
+        y coordinate of point 2    
+    xp : float
+        x coordinate of point 3
+    yp : float
+        y coordinate of point 3
+    Returns
+    -------
+    value : int
+        Returns value based on cross product    
+    """
     # Subtracting co-ordinates of 
     # point A from B and P, to 
     # make A as origin
@@ -1806,7 +1944,21 @@ def directionOfPoint(xa, ya, xb, yb, xp, yp):
     return 0
 
 def find_radial_path_2(graph, node):
-    # collect the indices of graph nodes that describe a radial path starting from 'node'
+    """
+    Make a list of the indices of graph nodes that describe a radial path starting from 'node'
+
+    Parameters
+    ----------
+    graph : directed graph
+        Graph of centerline or bankline
+    node : int
+        Number corresponding to the node from which to start the radial path.
+
+    Returns
+    -------
+    path : list
+        List of nodes along the radial path    
+    """  
     path = []
     path.append(node)
     edge_types = []
@@ -1824,6 +1976,18 @@ def find_radial_path_2(graph, node):
     return path
 
 def plot_simple_polygon_graph(poly_graph, ax, bank_type):
+    """
+    Make a plot of a simple polygon graph
+
+    Parameters
+    ----------
+    graph : directed graph
+        Simple polygon graph
+    ax : int
+        Axes for plotting
+    bank_type : str
+        String specifying the bank as either 'right' or 'left'
+    """  
     cmap = plt.get_cmap("tab10")
     path = find_longitudinal_path(poly_graph, 0)
     for i in trange(len(path)):
@@ -1844,16 +2008,225 @@ def plot_simple_polygon_graph(poly_graph, ax, bank_type):
                             ax.fill(poly_graph.nodes[node]['poly'].exterior.xy[0], poly_graph.nodes[node]['poly'].exterior.xy[1], facecolor = cmap(1), edgecolor='k', linewidth = 0.3, alpha = 0.5, zorder = count)
             count += 1
 
+def add_edge_directions_to_bank_graph(graph):
+    """
+    Add directionality to graph nodes as a 'direction' attribute.
+
+    Parameters
+    ----------
+    graph : directed graph
+        Centerline or bankline graph
+    
+    Returns
+    -------
+    graph : directed graph
+        Centerline or bankline graph with 'direction' attribute added.
+    """
+
+    for node in trange(graph.graph['number_of_centerlines']):
+        path = find_longitudinal_path(graph, node)
+        for i in range(len(path) - 1):
+            node_1 = path[i]
+            node_2 = path[i+1]
+            node_1_children = list(graph.successors(node_1))
+            node_2_children = list(graph.successors(node_2))
+            node_3 = False
+            node_4 = False
+            for n in node_1_children:
+                if graph[node_1][n]['edge_type'] == 'radial':
+                    node_4 = n
+            for n in node_2_children:
+                if graph[node_2][n]['edge_type'] == 'radial':
+                    node_3 = n
+            x1 = graph.nodes[node_1]['x']
+            y1 = graph.nodes[node_1]['y']
+            x2 = graph.nodes[node_2]['x']
+            y2 = graph.nodes[node_2]['y']
+            node_1_coords = np.array([x1, y1])
+            node_2_coords = np.array([x2, y2])
+            if node_3:
+                x3 = graph.nodes[node_3]['x']
+                y3 = graph.nodes[node_3]['y']
+                node_3_coords = np.array([x3, y3])
+                dist_23 = np.linalg.norm(node_2_coords - node_3_coords)
+                direction_23 = directionOfPoint(x1, y1, x2, y2, x3, y3)
+                graph[node_2][node_3]['direction'] = direction_23
+            if node_4:
+                x4 = graph.nodes[node_4]['x']
+                y4 = graph.nodes[node_4]['y']
+                node_4_coords = np.array([x4, y4])
+                dist_14 = np.linalg.norm(node_1_coords - node_4_coords)
+                direction_14 = directionOfPoint(x1, y1, x2, y2, x4, y4)
+                graph[node_1][node_4]['direction'] = direction_14
+    return graph
+
+def get_elapsed_time(dates_list):
+    """
+    Make a list whose elements correspond to the amount of time between the input dates.
+
+    Parameters
+    ----------
+
+    dates_list : 1D list
+                 Date corresponding to each centerline. Dates should be datetime object.
+
+    Returns
+    -------
+    elapsed_times : 1D list
+                    The amount of time between successive centerlines; 
+                    values given in fractions of a year.
+    """
+    elapsed_times = []
+    for i in range(len(dates_list)-1):
+        elapsed_time = abs(dates_list[i]-dates_list[i+1]).days
+        elapsed_times.append(elapsed_time/365)
+    return elapsed_times
+
+def find_cutoff_ages(graph):
+    """
+    Find the timestep corresponding to cutoff event(s).
+
+    Parameters
+    ----------
+    graph : directed graph
+            Centerline graph containing cutoffs.
+    
+    Returns
+    -------
+    cutoff_ages : 1D array
+                  Array elements are timestep during which a cutoff occurred.
+    """
+
+    cutoff_node_ages = []
+    for node in graph.graph['cutoff_nodes']:
+        try:
+            cutoff_node_ages.append(graph.nodes[node]['age'])
+        except:
+            pass
+    cutoff_ages = np.unique(cutoff_node_ages)
+    return cutoff_ages
+
+def plot_chosen_radial_paths(graph, X, Y, P, Q, num_paths, cutoff_index = False):
+    """
+    Produce a plot along a primary radial path for a user-specified region of the graph.
+    Location is defined with the cursor.
+
+    Parameters
+    ----------
+    graph : directed graph
+            Centerline graph.
+    X : list
+        x coordinates of lines.
+    Y : list
+        y coordinates of lines.
+    P : list
+        Arrays of indices of correlated successive pairs of curves (for first curve).
+    Q : list
+        Arrays of indices of correlated successive pairs of curves (for second curve)
+    num_paths : int
+                The number of desired primary radial paths.
+    cutoff_index = int (Optional)
+                   Number corresponding to the cutoff year. 
+    """
+
+    from matplotlib.widgets import Cursor
+
+    # plot a figure of the directed graph
+    fig,ax = plt.subplots()
+    plot_graph(graph, ax, show_nodes = False, label_nodes = False)
+    
+    # user selects (clicks) location where they want a primary radial path
+    cursor = Cursor(ax, useblit=True, color='k', linewidth=1)
+    zoom_ok = False
+    print('\nZoom or pan to view, \npress spacebar when ready to click:\n')
+    while not zoom_ok:
+        zoom_ok = plt.waitforbuttonpress()
+    user_loc = plt.ginput(n=num_paths)
+    plt.close(fig)
+
+    # find the x,y and centerline number for the nearest to the point that has been clicked
+    last_cl_points = np.vstack((X[-1], Y[-1])).T # coordinates of last centerlines
+    tree = KDTree(last_cl_points)
+    
+    X_flip, Y_flip, P_flip, Q_flip = np.flip(X), np.flip(Y), np.flip(P), np.flip(Q)
+
+    # find x,y for points along the nearest radial path
+    user_indices = []
+    user_xs = []
+    user_ys = []
+    for i in range(len(user_loc)):
+        user_ind = tree.query(user_loc[i])[1]
+        indices, x, y = find_indices(user_ind, X_flip, Y_flip, Q_flip, P_flip)
+        user_indices.append(indices)
+        user_xs.append(x)
+        user_ys.append(y)    
+    
+    # calculate distance between successive nodes along the radial path
+    user_dists = []
+    for inds in range(len(user_indices)):
+        dist = []
+        for i in range(len(user_indices[inds])-1):
+            dist.append(((user_xs[inds][i]-user_xs[inds][i+1])**2 + (user_ys[inds][i]-user_ys[inds][i+1])**2)**0.5)
+        user_dists.append(dist)
+    
+    # find the maximum distance (necessary for scaling the y-axis)
+    max_dist = 0
+    for item in user_dists:
+        for dist in item:
+            if dist>max_dist:
+                max_dist = dist
+            else:
+                dist+=1
+
+    # define color scheme
+    colors = plt.cm.inferno(np.linspace(0, 1, num_paths))
+    
+    # re-plot graph with the paths drawn and colored
+    fig, ax = plt.subplots(figsize=(20,15))
+    plot_graph(graph, ax, show_nodes = False, label_nodes = False)
+    for i in range(num_paths):
+        ax.plot(user_xs[i], user_ys[i], 'o', color=colors[i], markersize = 3)
+    ax.axis('equal')
+    
+    # x-plot migration rate vs age for the chosen paths
+    fig, ax = plt.subplots(figsize=(7,5))
+    for i in range(len(user_dists)):
+        ages = np.arange(len(user_dists[i]))
+        user_dists[i].reverse()
+        
+        # plot the data
+        ax.plot(ages,user_dists[i], color=colors[i])
+        
+    # add the cutoffs years to the plot as vertical lines
+    ax.axvline(x=cutoff_index, ymin=0, ymax=len(X), color='gray', linestyle='--')
+
+    # add plot elements
+    ax.set_xlabel('Time (year)')
+    ax.set_ylabel('Migration Rate (m/yr)')
+    ax.set_ylim(0, max_dist+1)
+
 class Bar:
     def __init__(self, number, scrolls):
         self.number = number
         self.scrolls = scrolls
     def plot(self, ax, color):
+        """
+        Make bar and scroll plot.
+
+        Parameters
+        ----------
+        ax : int
+            Axes for plotting
+        color : str
+            String correponding to desired color for plot
+        """
         ax.fill(self.polygon.exterior.xy[0], self.polygon.exterior.xy[1], facecolor='w', edgecolor='k', linewidth=2)
         for scroll in self.scrolls:
             ax.fill(scroll.polygon.exterior.xy[0], scroll.polygon.exterior.xy[1], facecolor=color, edgecolor='k', linewidth=0.5)
     def create_polygon(self):
-        # create bar polygon from component scrolls
+        """
+        Create bar polygon from component scrolls
+        """
         whole_bar = self.scrolls[0].polygon
         for scroll in self.scrolls:
             # using 'union' can result in topological errors
@@ -1861,6 +2234,14 @@ class Bar:
         whole_bar = whole_bar.buffer(0.1, 1, join_style=JOIN_STYLE.mitre).buffer(-0.1, 1, join_style=JOIN_STYLE.mitre)
         self.polygon = whole_bar
     def add_polygon_graphs(self, graph):
+        """
+        Add polygon graphs to bars.
+
+        Parameters
+        ----------
+        graph : directed graph
+            Polygon graph
+        """
         # the input 'graph' has to be a polygon graph
         nodes = []
         polys = []
@@ -1919,6 +2300,16 @@ class Bar:
         self.bar_graph = bar_graph
         self.bar_radial_graph = bar_radial_graph
     def plot_polygons(self, ax, plot_graphs):
+        """
+        Plot bar polygons 
+
+        Parameters
+        ----------
+        ax : int
+            Axes for plotting
+        plot_graphs : boolean
+            True or False; determines whether to plot bar polygons on top of scroll polygons
+        """
         r = random.random()
         b = random.random()
         g = random.random()
@@ -1937,6 +2328,16 @@ class Bar:
                         'g', linewidth = 1)
         ax.fill(self.polygon.exterior.xy[0], self.polygon.exterior.xy[1], facecolor='none', edgecolor='k', linewidth = 2)    
     def create_merged_polygons(self, ax, min_area):
+        """
+        Create merged bar polygons 
+
+        Parameters
+        ----------
+        ax : int
+            Axes for plotting
+        min_area : float
+            Minimum allowable area of a shapely polygon
+        """ 
         source_nodes = []
         for node in self.bar_radial_graph.nodes:
             if self.bar_radial_graph.in_degree(node) == 0:
@@ -1961,6 +2362,9 @@ class Bar:
         ax.fill(self.polygon.exterior.xy[0], self.polygon.exterior.xy[1], facecolor='none', edgecolor='b', linewidth=2)
         self.merged_polygons = polys
     def add_bank_type(self):
+        """
+        Add bank_type attribute, either 'left' or 'right'
+        """
         n_right_banks = 0
         n_left_banks = 0
         for scroll in self.scrolls:
@@ -1981,41 +2385,3 @@ class Scroll:
         self.polygon = polygon
         self.bar = bar
         self.small_polygons = small_polygons
-
-def add_edge_directions_to_bank_graph(graph):
-    for node in trange(graph.graph['number_of_centerlines']):
-        path = find_longitudinal_path(graph, node)
-        for i in range(len(path) - 1):
-            node_1 = path[i]
-            node_2 = path[i+1]
-            node_1_children = list(graph.successors(node_1))
-            node_2_children = list(graph.successors(node_2))
-            node_3 = False
-            node_4 = False
-            for n in node_1_children:
-                if graph[node_1][n]['edge_type'] == 'radial':
-                    node_4 = n
-            for n in node_2_children:
-                if graph[node_2][n]['edge_type'] == 'radial':
-                    node_3 = n
-            x1 = graph.nodes[node_1]['x']
-            y1 = graph.nodes[node_1]['y']
-            x2 = graph.nodes[node_2]['x']
-            y2 = graph.nodes[node_2]['y']
-            node_1_coords = np.array([x1, y1])
-            node_2_coords = np.array([x2, y2])
-            if node_3:
-                x3 = graph.nodes[node_3]['x']
-                y3 = graph.nodes[node_3]['y']
-                node_3_coords = np.array([x3, y3])
-                dist_23 = np.linalg.norm(node_2_coords - node_3_coords)
-                direction_23 = directionOfPoint(x1, y1, x2, y2, x3, y3)
-                graph[node_2][node_3]['direction'] = direction_23
-            if node_4:
-                x4 = graph.nodes[node_4]['x']
-                y4 = graph.nodes[node_4]['y']
-                node_4_coords = np.array([x4, y4])
-                dist_14 = np.linalg.norm(node_1_coords - node_4_coords)
-                direction_14 = directionOfPoint(x1, y1, x2, y2, x4, y4)
-                graph[node_1][node_4]['direction'] = direction_14
-    return graph
