@@ -1,4 +1,3 @@
-# import meanderpy as mp
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
@@ -276,7 +275,7 @@ def create_list_of_start_nodes(graph):
             start_nodes.append(node)
     return start_nodes
 
-def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, remove_cutoff_edges = False):
+def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, smoothing_factor = 51, remove_cutoff_edges = False, timesteps = None):
     """
     Create directed graph from a set of cghannel center- or bank lines.
 
@@ -287,18 +286,24 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, remove_cutof
     Y : list
         y coordinates of lines.
     P : list
-        Arrays of indices of correlated successive pairs of curves (for first curve).
+        Arrays of indices of correlated successive pairs of curves (for first curve)
     Q : list
         Arrays of indices of correlated successive pairs of curves (for second curve)
     n_points : int
-        Every 'n_points'th point on the first centerline is used to start a radial trajectory.
+        Every 'n_points'th point on the first centerline is used to start a radial trajectory
     max_dist : int
-        Parameter that is used to eliminate edges that correspond to cutoffs.
-
+        Parameter used to determine where cutoffs have occurred
+    smoothing_factor : int (Default = 51)
+        Window size in savgol filter, used when computing channel curvature
+    remove_cutoff_edges: Boolean (Optional, Default = False)
+        Parameter that is used to eliminate edges that correspond to cutoffs
+    timesteps: list (Optional, Default = None)
+        List containing floating point numbers representing the amount of time (years) between successive longitudinal paths.
+        If None the timestep defaults to 1.0.
     Returns
     -------
     graph : directed graph
-        Graph that contains all the center- or bank lines and radial lines.
+        Graph that contains all the center- or bank lines and radial lines
     """
     graph = nx.DiGraph(number_of_centerlines = len(X)) # directed graph to store nodes and edges
     cl_indices = [] # list of lists to store *centerline* indices that will be part of the graph
@@ -391,6 +396,16 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, remove_cutof
         graph.remove_node(node)
         if node in graph.graph['start_nodes']: # remove the node from 'start_nodes' as well
             graph.graph['start_nodes'].remove(node)
+    # compute curvature and add to graph nodes
+    add_curvature_to_line_graph(graph, smoothing_factor=smoothing_factor)
+    # add 'timestep' attribute to graph nodes
+    if timesteps is not None:
+        try:
+            add_timesteps_to_line_graph(graph, timesteps)
+        except:
+            print('Error: timesteps should be a list of datetime objects (YYYYMMDD)')
+    else:
+        add_timesteps_to_line_graph(graph, np.ones(len(X)))
     return graph
 
 def reconnect_nodes_along_centerline(graph1, graph2, cl_number):
@@ -581,10 +596,11 @@ def create_polygon_graph(graph):
     age = 0
     for node in trange(graph.graph['number_of_centerlines'] - 1):
         path = find_longitudinal_path(graph, node)
-        # compute curvature along the longitudinal lines:
-        # curvature = mp.compute_curvature(graph.graph['x'][path], graph.graph['y'][path])
-        curvature = compute_curvature(graph.graph['x'][path], graph.graph['y'][path])
-        curvature = savgol_filter(curvature, 51, 2) # smoothing of the curvature series (very noisy otherwise)
+
+        ### Get curvature series and timestep from the line graph
+        curvature = [graph.nodes[node]['curv'] for node in path]
+        ts = graph.nodes[node]['timestep']
+
         for i in range(len(path) - 1):
             node_1 = path[i]
             node_2 = path[i+1]
@@ -736,16 +752,16 @@ def create_polygon_graph(graph):
                         direction = direction_23
                     curvature_12 = 0.5*(curvature[i] + curvature[i+1])
                     if poly.is_valid: # add node only if polygon is valid
-                        poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1, length = length, width = width, direction = direction, migr_rate = 0.5*(dist_14 + dist_23), curv = curvature_12)
+                        poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1, length = length, width = width, direction = direction, timestep = ts, migr_rate = 0.5*(dist_14 + dist_23)/ts, curv = curvature_12)
                     else:
                         poly = poly.buffer(0) # fix the invalid polygon
-                        poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1, length = length, width = width, direction = direction, migr_rate = 0.5*(dist_14 + dist_23), curv = curvature_12)
+                        poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1, length = length, width = width, direction = direction, timestep = ts, migr_rate = 0.5*(dist_14 + dist_23)/ts, curv = curvature_12)
                     if i == 0:
                         if poly.is_valid:
                             cl_start_nodes.append(path[i])
                         else:
                             poly = poly.buffer(0) # fix the invalid polygon
-                            poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1, length = length, width = width, direction = direction, migr_rate = 0.5*(dist_14 + dist_23), curv = curvature_12)
+                            poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1, length = length, width = width, direction = direction, timestep = ts, migr_rate = 0.5*(dist_14 + dist_23)/ts, curv = curvature_12)
                             cl_start_nodes.append(path[i])
             else: 
                 if i == 0: # something is needed at the beginning of the centerline even when there is no 'node_3' or 'node_4', so we just make up a polygon
@@ -1179,7 +1195,7 @@ def add_curvature_to_line_graph(graph, smoothing_factor):
     ----------
     graph : directed graph
         Graph of center- or banklines.
-    smoothing_factor : float
+    smoothing_factor : int
         Smoothing factor in the Savitzky-Golay filtering that is applied to the curvature series.
     """
 
@@ -1187,7 +1203,6 @@ def add_curvature_to_line_graph(graph, smoothing_factor):
     curvs = []
     for cline in range(0, n_centerlines):
         path = find_longitudinal_path(graph, cline)
-        # curv = mp.compute_curvature(graph.graph['x'][path], graph.graph['y'][path])
         curv = compute_curvature(graph.graph['x'][path], graph.graph['y'][path])
         curv = savgol_filter(curv, smoothing_factor, 2)
         count = 0
@@ -1198,7 +1213,30 @@ def add_curvature_to_line_graph(graph, smoothing_factor):
         if 'curv' not in graph.nodes[node].keys():
             graph.nodes[node]['curv'] = np.nan
 
-def plot_migration_rate_map(wbar, graph1, graph2, vmin, vmax, dt, saved_ts, ax):
+def add_timesteps_to_line_graph(graph, timesteps):
+    """
+    Add timestep attribute to the nodes of a line graph, representing the amount of time between successive longitudinal paths. 
+    These timesteps could come from Landsat timestamps
+
+    Parameters
+    ----------
+    graph : directed graph
+        Graph of center- or banklines.
+    timesteps: list (Optional, Default = None)
+        List containing floating point numbers representing the amount of time (years) between successive longitudinal paths.
+    """
+
+    n_centerlines = graph.graph['number_of_centerlines']
+    for cline in range(0, n_centerlines-1):
+        path = find_longitudinal_path(graph, cline)
+        for node in path:
+            graph.nodes[node]['timestep'] = timesteps[cline]
+            
+    for node in graph.nodes:
+        if 'timestep' not in graph.nodes[node].keys():
+            graph.nodes[node]['timestep'] = np.nan
+
+def plot_migration_rate_map(wbar, graph1, graph2, vmin, vmax, ax):
     """
     Make a spatial plot of migration rate.
 
@@ -1213,23 +1251,19 @@ def plot_migration_rate_map(wbar, graph1, graph2, vmin, vmax, dt, saved_ts, ax):
         Minimum value of migration rate (for scaling)
     vmax : float
         Maximum value of migration rate (for scaling)
-    dt : float
-        Timestep value
-    saved_ts: int
-        Number of timesteps to save; E.g. saved_ts = 1 would correspond to every timestep
     ax : int
         Axes for plotting
     """
-
     if wbar.scrolls[-1].bank == 'left':
         graph = graph2
     if wbar.scrolls[-1].bank == 'right':
         graph = graph1
     norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
     m = mpl.cm.ScalarMappable(norm=norm, cmap='coolwarm')
-    time_step = (dt * saved_ts)/(365*24*60*60)
+    #time_step = (dt * saved_ts)/(365*24*60*60)
     for node in wbar.bar_graph.nodes:
         length = wbar.bar_graph.nodes[node]['length']
+        time_step = wbar.bar_graph.nodes[node]['timestep']
         if type(wbar.bar_graph.nodes[node]['poly']) == Polygon:
             ax.fill(wbar.bar_graph.nodes[node]['poly'].exterior.xy[0], 
                 wbar.bar_graph.nodes[node]['poly'].exterior.xy[1], 
@@ -1254,7 +1288,6 @@ def plot_curvature_map(wbar, vmin, vmax, W, ax):
     ax : int
         Axes for plotting
     """
-
     norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
     m = mpl.cm.ScalarMappable(norm=norm, cmap='Reds')
     for node in wbar.bar_graph.nodes:
@@ -1603,7 +1636,7 @@ def create_scrolls_and_find_connected_scrolls(graph1, graph2, cutoff_area):
                 ax.fill(scrolls[i].exterior.xy[0], scrolls[i].exterior.xy[1], facecolor=color, edgecolor='k')
     return scrolls, scroll_ages, cutoffs, all_bars_graph
 
-def create_polygon_graphs_and_bar_graphs(graph1, graph2, all_bars_graph, scrolls, scroll_ages, cutoffs, X1, Y1, X2, Y2, min_area):
+def create_polygon_graphs_and_bar_graphs(graph1, graph2, all_bars_graph, scrolls, scroll_ages, X1, Y1, X2, Y2, min_area):
     """
     Make a directed graphs that contain shapely polygons representing the banks,
     and add these graphs to 'bar' objects.
@@ -1620,8 +1653,6 @@ def create_polygon_graphs_and_bar_graphs(graph1, graph2, all_bars_graph, scrolls
         List of 'scroll' objects
     scroll_ages : list
         List of ages corresponding to the 'scroll' objects
-    cutoffs : list
-        Shapely polygons that represent cutoffs.
     X1 : list 
         x coordinate arrays.
     Y1 : list
@@ -1687,7 +1718,7 @@ def create_polygon_graphs_and_bar_graphs(graph1, graph2, all_bars_graph, scrolls
             wbars[i].add_polygon_graphs(poly_graph_2)   
     return wbars, poly_graph_1, poly_graph_2
 
-def plot_bar_graphs(graph1, graph2, wbars, ts, cutoffs, dt, X1, Y1, X2, Y2, W, saved_ts, vmin, vmax, plot_type, ax):
+def plot_bar_graphs(graph1, graph2, wbars, cutoffs, X1, Y1, X2, Y2, W, vmin, vmax, plot_type, ax):
     """
     Make and plot a graph containing 'bar' objects.
 
@@ -1701,8 +1732,6 @@ def plot_bar_graphs(graph1, graph2, wbars, ts, cutoffs, dt, X1, Y1, X2, Y2, W, s
         List of 'bar' objects
     cutoffs : list
         Shapely polygons that represent cutoffs.
-    dt : float
-        Timestep
     X1 : list 
         x coordinate arrays.
     Y1 : list
@@ -1713,8 +1742,6 @@ def plot_bar_graphs(graph1, graph2, wbars, ts, cutoffs, dt, X1, Y1, X2, Y2, W, s
         y coordinate arrays.
     W : float
         Channel width (meters)
-    saved_ts: int
-        Number of timesteps to save; E.g. saved_ts = 1 would correspond to every timestep
     vmin : float
         Minimum value of parameter of interest (for scaling)
     vmax : float
@@ -1736,27 +1763,26 @@ def plot_bar_graphs(graph1, graph2, wbars, ts, cutoffs, dt, X1, Y1, X2, Y2, W, s
         if len(cf) > 0:
             cutoff_inds.append(count)
         count += 1
-    # plotting cutoffs:     
+    # plotting cutoffs     
     for wbar in wbars:
         ages = []
         for scroll in wbar.scrolls:
             ages.append(scroll.age)
         for i in cutoff_inds: # cutoffs need to be plotted at the right time
             if max(ages) + 1 == i:
-                # ax.add_patch(PolygonPatch(cutoffs[i][0], facecolor='lightblue', edgecolor='k'))
                 ax.fill(cutoffs[i][0].exterior.xy[0], cutoffs[i][0].exterior.xy[1], facecolor='lightblue', edgecolor='k')
-    # create polygon for most recent channel and plot it:
+    # create polygon for most recent channel and plot it
     ch = create_channel_polygon_from_banks(X1[-1], Y1[-1], X2[-1], Y2[-1])
     ax.fill(ch.exterior.xy[0], ch.exterior.xy[1], facecolor='lightblue', edgecolor='k')
-    # add polygon graphs to bars and plot them (based on plot_type):
+    # add polygon graphs to bars and plot them (based on plot_type)
     for i in trange(len(wbars)):
         if plot_type == 'migration':
-            plot_migration_rate_map(wbars[i], graph1, graph2, vmin, vmax, dt, saved_ts, ax)
+            plot_migration_rate_map(wbars[i], graph1, graph2, vmin, vmax, ax)
         if plot_type == 'curvature':
             plot_curvature_map(wbars[i], vmin, vmax, W, ax)
         if plot_type == 'age':
             plot_age_map(wbars[i], vmin, vmax, ax)
-    plt.axis('equal');
+    plt.axis('equal')
 
 def create_simple_polygon_graph(bank_graph, X):
     """
@@ -2060,27 +2086,26 @@ def add_edge_directions_to_bank_graph(graph):
                 graph[node_1][node_4]['direction'] = direction_14
     return graph
 
-def get_elapsed_time(dates_list):
+def get_timesteps(dates_list):
     """
-    Make a list whose elements correspond to the amount of time between the input dates.
+    Make a list whose elements correspond to the amount of time between the successive longitudinal paths.
 
     Parameters
     ----------
 
     dates_list : 1D list
-                 Date corresponding to each centerline. Dates should be datetime object.
+                 Date corresponding to each longitudinal path. Elements should be datetime objects.
 
     Returns
     -------
-    elapsed_times : 1D list
-                    The amount of time between successive centerlines; 
-                    values given in fractions of a year.
+    timesteps : 1D list
+                The amount of time between successive longitudinal path with units of years.
     """
-    elapsed_times = []
+    timesteps = []
     for i in range(len(dates_list)-1):
-        elapsed_time = abs(dates_list[i]-dates_list[i+1]).days
-        elapsed_times.append(elapsed_time/365)
-    return elapsed_times
+        timestep = abs(dates_list[i]-dates_list[i+1]).days
+        timesteps.append(timestep/365)
+    return timesteps
 
 def find_cutoff_ages(graph):
     """
