@@ -44,7 +44,7 @@ bars.
 - `archive/` (gitignored) — old paper figures, animations, design files, abstracts,
   and `mg_temp.py` (an older snapshot of the module; its `polygon_width_and_length`
   has been merged into `meandergraph.py`). Do not develop here.
-- Notebooks in `meandergraph/`:
+- Notebooks in `examples/` (upstream layout since PR #3):
   - `meandergraph_Mamore_banks_simple_example.ipynb` — the canonical bankline
     workflow (referenced by the README).
   - `meandergraph_Mamore_banks_example.ipynb`, `Plot_Mamore_meandergraph_data.ipynb`
@@ -88,7 +88,18 @@ bars.
   `meandergraph_3D.py`).
 - `librosa` is used *only* for its `dtw` function.
 
-## Pitfalls / current state (as of 2026-08)
+## Collaboration
+
+GitHub PRs #2–#4 (2023–2024, from `cmspeed`) added non-uniform timestep support
+(`timesteps` argument of `create_graph_from_channel_lines`,
+`add_timesteps_to_line_graph`, node attribute `timestep`), made
+`create_graph_from_channel_lines` always add curvature, moved the example
+notebooks to `examples/`, and updated many docstrings. This was merged with the
+local Phase 0–2 work in Sep 2026. `plot_migration_rate_map` no longer takes
+`dt`/`saved_ts` (it uses the `timestep` node attribute), and
+`create_simple_polygon_graph` takes an (unused) `X` argument.
+
+## Pitfalls / current state (as of 2026-09)
 
 The code was written around 2021–2023 against **shapely 1.8, networkx 2.x,
 matplotlib < 3.9** and has not been updated since:
