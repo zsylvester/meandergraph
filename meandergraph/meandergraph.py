@@ -1230,6 +1230,15 @@ def ensure_multipolygon(geom):
         return MultiPolygon([geom])
     return MultiPolygon([g for g in geom.geoms if type(g) == Polygon])
 
+def fill_polygon(poly, ax, **kwargs):
+    """
+    Plot a filled polygon on 'ax'; works whether 'poly' is a Polygon or a MultiPolygon.
+    Keyword arguments are passed on to 'ax.fill'.
+    """
+
+    for geom in ensure_multipolygon(poly).geoms:
+        ax.fill(geom.exterior.xy[0], geom.exterior.xy[1], **kwargs)
+
 def fix_geometry(geom):
     """Attempt to fix invalid geometries"""
     
@@ -1893,7 +1902,7 @@ def plot_bar_lines(wbar, graph1, graph2, ax):
                         x1 = l.xy[0]
                         y1 = l.xy[1]
                         ax.plot(x1, y1, color=cmap(1), linewidth=0.5)
-    ax.fill(wbar.polygon.exterior.xy[0], wbar.polygon.exterior.xy[1], facecolor='none', edgecolor='k', linewidth = 2, zorder = 10000)
+    fill_polygon(wbar.polygon, ax, facecolor='none', edgecolor='k', linewidth = 2, zorder = 10000)
 
 def create_scrolls_and_find_connected_scrolls(graph1, graph2, cutoff_area):
     """
@@ -1957,7 +1966,7 @@ def create_scrolls_and_find_connected_scrolls(graph1, graph2, cutoff_area):
 
     connections = []
     for n in range(1,10): # outer loop used for fluctuations of centerlines to ensure they are part of the same 'bar'
-        for i in trange(1, len(bars)):
+        for i in trange(n, len(bars)): # start at 'n' so that 'i-n' does not wrap around to the end of the list
             for j in range(n_scrolls[i]):
                 for k in range(n_scrolls[i-n]):
                     if (type(bars[i-n]) == MultiPolygon) and (type(bars[i]) == MultiPolygon):
@@ -2585,9 +2594,9 @@ class Bar:
         color : str
             String correponding to desired color for plot
         """
-        ax.fill(self.polygon.exterior.xy[0], self.polygon.exterior.xy[1], facecolor='w', edgecolor='k', linewidth=2)
+        fill_polygon(self.polygon, ax, facecolor='w', edgecolor='k', linewidth=2)
         for scroll in self.scrolls:
-            ax.fill(scroll.polygon.exterior.xy[0], scroll.polygon.exterior.xy[1], facecolor=color, edgecolor='k', linewidth=0.5)
+            fill_polygon(scroll.polygon, ax, facecolor=color, edgecolor='k', linewidth=0.5)
     def create_polygon(self):
         """
         Create bar polygon from component scrolls
@@ -2681,7 +2690,7 @@ class Bar:
         color = (r, g, b, 0.5)
         for scroll in self.scrolls: # plot cropped polygons
             for small_polygon in scroll.small_polygons:
-                ax.fill(small_polygon.exterior.xy[0], small_polygon.exterior.xy[1], facecolor=color, edgecolor='k', linewidth = 0.5)
+                fill_polygon(small_polygon, ax, facecolor=color, edgecolor='k', linewidth = 0.5)
         if plot_graphs:
             for (s, e) in tqdm(self.bar_graph.edges):
                 ax.plot([self.bar_graph.nodes[s]['poly'].centroid.x, self.bar_graph.nodes[e]['poly'].centroid.x],
@@ -2691,7 +2700,7 @@ class Bar:
                 ax.plot([self.bar_radial_graph.nodes[s]['x'], self.bar_radial_graph.nodes[e]['x']],
                         [self.bar_radial_graph.nodes[s]['y'], self.bar_radial_graph.nodes[e]['y']], 
                         'g', linewidth = 1)
-        ax.fill(self.polygon.exterior.xy[0], self.polygon.exterior.xy[1], facecolor='none', edgecolor='k', linewidth = 2)    
+        fill_polygon(self.polygon, ax, facecolor='none', edgecolor='k', linewidth = 2)
     def create_merged_polygons(self, ax, min_area):
         """
         Create merged bar polygons 
@@ -2723,8 +2732,8 @@ class Bar:
                 sparse_inds = find_sparse_inds(self.bar_graph, nodes, min_area)
                 polys = merge_polygons(self.bar_graph, nodes, sparse_inds, polys)
         for poly in polys:
-            ax.fill(poly.exterior.xy[0], poly.exterior.xy[1], facecolor='none', edgecolor='k', linewidth=0.5)
-        ax.fill(self.polygon.exterior.xy[0], self.polygon.exterior.xy[1], facecolor='none', edgecolor='b', linewidth=2)
+            fill_polygon(poly, ax, facecolor='none', edgecolor='k', linewidth=0.5)
+        fill_polygon(self.polygon, ax, facecolor='none', edgecolor='b', linewidth=2)
         self.merged_polygons = polys
     def add_bank_type(self):
         """
