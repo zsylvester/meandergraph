@@ -18,11 +18,11 @@ from shapely.errors import GEOSException
 from .graph import find_longitudinal_path, find_next_node
 from .geometry import fix_geometry, compute_distance
 from .polygons import create_polygon_graph
-from .plot import plot_bars_from_banks, fill_polygon
+from .plot import compute_bars_from_banks, fill_polygon
 
 __all__ = [
     "merge_polygons", "find_sparse_inds",
-    "create_scrolls_and_find_connected_scrolls",
+    "compute_scrolls_and_connections", "create_scrolls_and_find_connected_scrolls",
     "create_polygon_graphs_and_bar_graphs",
     "polygon_width_and_length", "add_polygon_width_and_length",
     "Bar", "Scroll",
@@ -92,9 +92,10 @@ def find_sparse_inds(graph, nodes, min_area):
     return sparse_inds
 
 
-def create_scrolls_and_find_connected_scrolls(graph1, graph2, cutoff_area):
+def compute_scrolls_and_connections(graph1, graph2, cutoff_area):
     """
-    Make a list of 'scroll' objects and plot them.
+    Compute 'scroll' objects and which of them are connected into the same
+    bar (no plotting).
 
     Parameters
     ----------
@@ -104,7 +105,7 @@ def create_scrolls_and_find_connected_scrolls(graph1, graph2, cutoff_area):
         Bankline graph.
     cutoff_area : float
         Maximum continuous area (created through channel bank movement in one timestep) that is still considered a bar and not a cutoff.
-        
+
     Returns
     -------
     scrolls : list
@@ -116,11 +117,7 @@ def create_scrolls_and_find_connected_scrolls(graph1, graph2, cutoff_area):
     all_bars_graph: directed graph
         A graph containing all of the 'bar' objects.
     """
-    # create scrolls
-    fig = plt.figure()
-    ax1 = fig.add_subplot(111)
-    # bars, chs, all_chs, jumps, cutoffs = plot_bars2(graph, cutoff_area, ax1, W)
-    bars, chs, all_chs, jumps, cutoffs = plot_bars_from_banks(graph1, graph2, cutoff_area, ax1)
+    bars, chs, all_chs, jumps, cutoffs = compute_bars_from_banks(graph1, graph2, cutoff_area)
 
     # remove cutoffs from list of scrolls of same age:
     new_bars = []
@@ -179,9 +176,37 @@ def create_scrolls_and_find_connected_scrolls(graph1, graph2, cutoff_area):
     for i in range(len(connections)):
         all_bars_graph.add_edge(connections[i][0], connections[i][1])
 
+    return scrolls, scroll_ages, cutoffs, all_bars_graph
+
+def create_scrolls_and_find_connected_scrolls(graph1, graph2, cutoff_area):
+    """
+    Make a list of 'scroll' objects and plot them, colored by which bar
+    (connected component) they belong to.
+
+    Parameters
+    ----------
+    graph1 : directed graph
+        Bankline graph.
+    graph2 : directed graph
+        Bankline graph.
+    cutoff_area : float
+        Maximum continuous area (created through channel bank movement in one timestep) that is still considered a bar and not a cutoff.
+
+    Returns
+    -------
+    scrolls : list
+        List of 'scroll' objects
+    scroll_ages : list
+        List of ages corresponding to the 'scroll' objects
+    cutoffs : list
+        Shapely polygons that represent cutoffs.
+    all_bars_graph: directed graph
+        A graph containing all of the 'bar' objects.
+    """
+    scrolls, scroll_ages, cutoffs, all_bars_graph = compute_scrolls_and_connections(graph1, graph2, cutoff_area)
+
     fig = plt.figure()
     ax = fig.add_subplot(111)
-
     for component in nx.connected_components(all_bars_graph):
         r = random.random()
         b = random.random()
