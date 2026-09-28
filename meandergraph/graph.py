@@ -43,7 +43,54 @@ __all__ = [
     "add_curvature_to_line_graph", "add_timesteps_to_line_graph",
     "find_next_node", "add_sparse_cutoff_nodes", "find_radial_path_2",
     "add_edge_directions_to_bank_graph", "find_cutoff_ages",
+    "radial_successor", "channel_successor",
 ]
+
+def radial_successor(graph, node):
+    """
+    Find the successor of 'node' reached by a 'radial' edge.
+
+    Parameters
+    ----------
+    graph : directed graph
+        Graph with radial edges defined.
+    node : int
+        Node whose radial successor is wanted.
+
+    Returns
+    -------
+    successor : int or False
+        The radial successor of 'node', or False if it has none.
+    """
+
+    successor = False
+    for n in graph.successors(node):
+        if graph[node][n]['edge_type'] == 'radial':
+            successor = n
+    return successor
+
+def channel_successor(graph, node):
+    """
+    Find the successor of 'node' reached by a 'channel' edge.
+
+    Parameters
+    ----------
+    graph : directed graph
+        Graph with channel edges defined.
+    node : int
+        Node whose channel successor is wanted.
+
+    Returns
+    -------
+    successor : int or False
+        The channel successor of 'node', or False if it has none.
+    """
+
+    successor = False
+    for n in graph.successors(node):
+        if graph[node][n]['edge_type'] == 'channel':
+            successor = n
+    return successor
 
 def find_radial_path(graph, node):
     """
@@ -407,10 +454,7 @@ def remove_high_density_nodes(graph1, min_dist, max_dist):
                     path1 = find_radial_path_2(graph2, node) # find radial path that starts with current node
                     for n in path1:
                         # compute distance between nodes that are upstream and downstream from current node:
-                        successors = graph2.successors(n)
-                        for successor in successors:
-                            if graph2[n][successor]['edge_type'] == 'channel':
-                                n_successor = successor
+                        n_successor = channel_successor(graph2, n)
                         predecessors = graph2.predecessors(n)
                         for predecessor in predecessors:
                             if graph2[predecessor][n]['edge_type'] == 'channel':
@@ -591,16 +635,8 @@ def add_edge_directions_to_bank_graph(graph):
         for i in range(len(path) - 1):
             node_1 = path[i]
             node_2 = path[i+1]
-            node_1_children = list(graph.successors(node_1))
-            node_2_children = list(graph.successors(node_2))
-            node_3 = False
-            node_4 = False
-            for n in node_1_children:
-                if graph[node_1][n]['edge_type'] == 'radial':
-                    node_4 = n
-            for n in node_2_children:
-                if graph[node_2][n]['edge_type'] == 'radial':
-                    node_3 = n
+            node_4 = radial_successor(graph, node_1)
+            node_3 = radial_successor(graph, node_2)
             x1 = graph.nodes[node_1]['x']
             y1 = graph.nodes[node_1]['y']
             x2 = graph.nodes[node_2]['x']
