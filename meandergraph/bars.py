@@ -4,6 +4,8 @@ scrolls) objects, and the functions that build them from a pair of
 bankline graphs.
 """
 import random
+from dataclasses import dataclass
+from typing import List, Optional, Union
 import numpy as np
 import networkx as nx
 from tqdm import trange, tqdm
@@ -365,10 +367,43 @@ def add_polygon_width_and_length(wbars, graph1, graph2):
             wbar.bar_graph.nodes[node]['length'] = length
 
 
+@dataclass
 class Bar:
-    def __init__(self, number, scrolls):
-        self.number = number
-        self.scrolls = scrolls
+    """
+    A connected set of 'scroll' polygons (one-timestep depositional areas)
+    that migration has built up into a single point bar / meander bend
+    complex.
+
+    Attributes
+    ----------
+    number : int
+        Index of this bar within the list of bars returned by
+        create_polygon_graphs_and_bar_graphs.
+    scrolls : list of Scroll
+        The individual scrolls that make up this bar.
+    polygon : shapely Polygon or MultiPolygon, optional
+        The bar's outline; set by create_polygon().
+    bar_graph : directed graph, optional
+        Polygon-graph subgraph relevant to this bar; set by
+        add_polygon_graphs().
+    bar_radial_graph : directed graph, optional
+        Radial connectivity between this bar's polygons; set by
+        add_polygon_graphs().
+    merged_polygons : list of shapely Polygon, optional
+        Polygons merged along radial trajectories; set by
+        create_merged_polygons().
+    bank_type : {'left', 'right'}, optional
+        Which bank this bar is predominantly on; set by add_bank_type().
+    """
+
+    number: int
+    scrolls: List["Scroll"]
+    polygon: Optional[Union[Polygon, MultiPolygon]] = None
+    bar_graph: Optional[nx.DiGraph] = None
+    bar_radial_graph: Optional[nx.DiGraph] = None
+    merged_polygons: Optional[List[Polygon]] = None
+    bank_type: Optional[str] = None
+
     def plot(self, ax, color):
         """
         Make bar and scroll plot.
@@ -545,12 +580,34 @@ class Bar:
             self.bank_type = 'left'
 
 
+@dataclass
 class Scroll:
-    def __init__(self, number, age, bank, polygon, bar, small_polygons):
-        self.number = number
-        self.age = age
-        self.bank = bank # left or right bank
-        self.polygon = polygon
-        self.bar = bar
-        self.small_polygons = small_polygons
+    """
+    A single 'scroll': the depositional polygon created by one timestep of
+    channel migration.
+
+    Attributes
+    ----------
+    number : int
+        Index of this scroll within the flat list of scrolls returned by
+        create_scrolls_and_find_connected_scrolls.
+    age : int
+        Timestep (bar/channel-line index) this scroll formed during.
+    bank : {'left', 'right'}
+        Which bank this scroll is on.
+    polygon : shapely Polygon or MultiPolygon
+        The scroll's outline.
+    bar : Bar
+        The bar this scroll has been assigned to.
+    small_polygons : list of shapely Polygon
+        Sub-polygons of this scroll assigned to individual polygon-graph
+        nodes; appended to by Bar.add_polygon_graphs().
+    """
+
+    number: int
+    age: int
+    bank: str
+    polygon: Union[Polygon, MultiPolygon]
+    bar: "Bar"
+    small_polygons: List[Polygon]
 
