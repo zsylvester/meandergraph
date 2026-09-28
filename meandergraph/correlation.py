@@ -3,6 +3,8 @@ Correlate successive center- or banklines with dynamic time warping (via
 librosa.sequence.dtw), and the curve-resampling / curvature / timestep
 helpers built on top of it.
 """
+from typing import List, Optional, Tuple
+
 import numpy as np
 from scipy.spatial import distance, KDTree
 from scipy import interpolate
@@ -15,7 +17,7 @@ __all__ = [
     "compute_curvature", "resample_centerline", "get_timesteps",
 ]
 
-def find_next_index(p, q, ind1):
+def find_next_index(p: np.ndarray, q: np.ndarray, ind1: int) -> int:
     """
     Find index 'ind2' of the next point on the next curve if the current index is 'ind1'.
 
@@ -39,8 +41,7 @@ def find_next_index(p, q, ind1):
     ind2 = q[p_index] # find the equivalent index in 'q'
     return ind2
 
-
-def correlate_curves(x1,x2,y1,y2,band_rad=None):
+def correlate_curves(x1: np.ndarray, x2: np.ndarray, y1: np.ndarray, y2: np.ndarray, band_rad: Optional[float] = None) -> Tuple[np.ndarray, np.ndarray, float]:
     """ 
     Use dynamic time warping to correlate two 2D curves.
 
@@ -85,13 +86,13 @@ def correlate_curves(x1,x2,y1,y2,band_rad=None):
 #     return path[::-1,0], path[::-1,1], distance
 
 
-def correlate_set_of_curves(X, Y):
+def correlate_set_of_curves(X: List[np.ndarray], Y: List[np.ndarray]) -> Tuple[List[np.ndarray], List[np.ndarray], List[float]]:
     """
     Correlate a set of curves defined by x and y coordinates stored as two lists X and Y.
 
     Parameters
     ----------
-    X : list 
+    X : list
         x coordinate arrays.
     Y : list
         y coordinate arrays.
@@ -102,6 +103,8 @@ def correlate_set_of_curves(X, Y):
         Arrays of indices of correlated successive pairs of curves (for first curve)
     Q : list
         Arrays of indices of correlated successive pairs of curves (for second curve)
+    costs : list
+        Total dynamic time warping cost of each successive pair's correlation.
     """
 
     P = []
@@ -115,7 +118,7 @@ def correlate_set_of_curves(X, Y):
     return(P, Q, costs)
 
 
-def find_indices(ind1, X, Y, P, Q):
+def find_indices(ind1: int, X: List[np.ndarray], Y: List[np.ndarray], P: List[np.ndarray], Q: List[np.ndarray]) -> Tuple[List[int], np.ndarray, np.ndarray]:
     """
     Tracks one index through a series of centerlines (stored as lists of coordinates X and Y) 
 
@@ -161,7 +164,7 @@ def find_indices(ind1, X, Y, P, Q):
     return indices, x, y
 
 
-def restrict_and_correlate_lines(X, Y, points, delta_s=2.0):
+def restrict_and_correlate_lines(X: List[np.ndarray], Y: List[np.ndarray], points, delta_s: float = 2.0) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray], List[np.ndarray], List[float]]:
     """
     Restrict centerlines or banklines to a specified segment and correlate them across time.
     
@@ -260,7 +263,7 @@ def restrict_and_correlate_lines(X, Y, points, delta_s=2.0):
     return X, Y, P, Q, costs
 
 
-def compute_derivatives(x, y):
+def compute_derivatives(x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute first derivatives of a curve (centerline).
 
@@ -290,7 +293,7 @@ def compute_derivatives(x, y):
     return dx, dy, ds, s
 
 
-def compute_curvature(x,y):
+def compute_curvature(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     """function for computing first derivatives and curvature of a curve (centerline)
     x,y are cartesian coodinates of the curve
     outputs:
@@ -307,7 +310,7 @@ def compute_curvature(x,y):
     return curvature
 
 
-def resample_centerline(x, y, deltas):
+def resample_centerline(x: np.ndarray, y: np.ndarray, deltas: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     '''resample centerline so that 'deltas' is roughly constant, using parametric 
     spline representation of curve; note that there is *no* smoothing
 
@@ -332,7 +335,7 @@ def resample_centerline(x, y, deltas):
     return x,y,dx,dy,ds,s
 
 
-def get_timesteps(dates_list):
+def get_timesteps(dates_list: list) -> List[float]:
     """
     Make a list whose elements correspond to the amount of time between the successive longitudinal paths.
 

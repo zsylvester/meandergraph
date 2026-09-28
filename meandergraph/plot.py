@@ -32,7 +32,7 @@ __all__ = [
     "plot_simple_polygon_graph", "plot_chosen_radial_paths", "fill_polygon",
 ]
 
-def plot_graph(graph, ax, show_nodes = False, label_nodes = False):
+def plot_graph(graph: nx.DiGraph, ax: Axes, show_nodes: bool = False, label_nodes: bool = False) -> None:
     """
     Plot channel line graphs (does not work with polygon graphs)
 
@@ -65,7 +65,7 @@ def plot_graph(graph, ax, show_nodes = False, label_nodes = False):
     plt.axis('equal')
 
 
-def compute_bars_from_centerline(graph, cutoff_area, W):
+def compute_bars_from_centerline(graph: nx.DiGraph, cutoff_area: float, W: float) -> Tuple[list, list, list, list, list]:
     """
     Compute channel/scroll-bar/cutoff polygons from centerline data (no
     plotting).
@@ -135,7 +135,7 @@ def compute_bars_from_centerline(graph, cutoff_area, W):
         bars.append(bar)
     return bars, chs, all_chs, jumps, cutoffs
 
-def plot_bars_from_centerline(graph, cutoff_area, ax, W):
+def plot_bars_from_centerline(graph: nx.DiGraph, cutoff_area: float, ax: Axes, W: float) -> Tuple[list, list, list, list, list]:
     """
     Create polygons for 'scroll' bars from channel centerline data and plot them.
 
@@ -182,7 +182,7 @@ def plot_bars_from_centerline(graph, cutoff_area, ax, W):
     return bars, chs, all_chs, jumps, cutoffs
 
 
-def compute_bars_from_banks(graph1, graph2, cutoff_area):
+def compute_bars_from_banks(graph1: nx.DiGraph, graph2: nx.DiGraph, cutoff_area: float) -> Tuple[list, list, list, list, list]:
     """
     Compute channel/scroll-bar/cutoff polygons from bankline data (no
     plotting).
@@ -253,7 +253,7 @@ def compute_bars_from_banks(graph1, graph2, cutoff_area):
         bars.append(bar)
     return bars, chs, all_chs, jumps, cutoffs
 
-def plot_bars_from_banks(graph1, graph2, cutoff_area, ax):
+def plot_bars_from_banks(graph1: nx.DiGraph, graph2: nx.DiGraph, cutoff_area: float, ax: Axes) -> Tuple[list, list, list, list, list]:
     """
     Create polygons for 'scroll' bars from channel bankline data and plot them.
 
@@ -314,7 +314,7 @@ def plot_bars_from_banks(graph1, graph2, cutoff_area, ax):
     return bars, chs, all_chs, jumps, cutoffs
 
 
-def plot_migration_rate_map(wbar, graph1, graph2, vmin, vmax, ax):
+def plot_migration_rate_map(wbar: "Bar", graph1: nx.DiGraph, graph2: nx.DiGraph, vmin: float, vmax: float, ax: Axes) -> None:
     """
     Make a spatial plot of migration rate.
 
@@ -349,7 +349,7 @@ def plot_migration_rate_map(wbar, graph1, graph2, vmin, vmax, ax):
                 edgecolor='k', linewidth=0.25)
 
 
-def plot_curvature_map(wbar, vmin, vmax, W, ax, cmap='coolwarm'):
+def plot_curvature_map(wbar: "Bar", vmin: float, vmax: float, W: float, ax: Axes, cmap: str = 'coolwarm') -> None:
     """
     Make a spatial plot of curvature.
 
@@ -378,7 +378,7 @@ def plot_curvature_map(wbar, vmin, vmax, W, ax, cmap='coolwarm'):
                     edgecolor='k', linewidth=0.25)
 
 
-def plot_age_map(wbar, vmin, vmax, ax):
+def plot_age_map(wbar: "Bar", vmin: float, vmax: float, ax: Axes) -> None:
     """
     Make a spatial plot of age.
 
@@ -406,7 +406,7 @@ def plot_age_map(wbar, vmin, vmax, ax):
                     edgecolor='k', linewidth=0.25)
 
 
-def plot_bar_lines(wbar, graph1, graph2, ax):
+def plot_bar_lines(wbar: "Bar", graph1: nx.DiGraph, graph2: nx.DiGraph, ax: Axes) -> None:
     """
     Create a plot of the outline of the bar polygons.
 
@@ -477,7 +477,7 @@ def plot_bar_lines(wbar, graph1, graph2, ax):
     fill_polygon(wbar.polygon, ax, facecolor='none', edgecolor='k', linewidth = 2, zorder = 10000)
 
 
-def plot_bar_graphs(graph1, graph2, wbars, cutoffs, X1, Y1, X2, Y2, W, vmin, vmax, plot_type, ax):
+def plot_bar_graphs(graph1: nx.DiGraph, graph2: nx.DiGraph, wbars: List["Bar"], cutoffs: list, X1: list, Y1: list, X2: list, Y2: list, W: float, vmin: float, vmax: float, plot_type: str, ax: Axes) -> None:
     """
     Make and plot a graph containing 'bar' objects.
 
@@ -544,7 +544,7 @@ def plot_bar_graphs(graph1, graph2, wbars, cutoffs, X1, Y1, X2, Y2, W, vmin, vma
     plt.axis('equal')
 
 
-def plot_bars_by_bar_number(wbars, ax):
+def plot_bars_by_bar_number(wbars: List["Bar"], ax: Axes) -> None:
     """
     Make a plot of the bar objects. 
 
@@ -564,7 +564,7 @@ def plot_bars_by_bar_number(wbars, ax):
 # from: https://www.geeksforgeeks.org/direction-point-line-segment/
 
 
-def plot_simple_polygon_graph(poly_graph, ax, bank_type):
+def plot_simple_polygon_graph(poly_graph: nx.DiGraph, ax: Axes, bank_type: str) -> None:
     """
     Make a plot of a simple polygon graph
 
@@ -598,7 +598,7 @@ def plot_simple_polygon_graph(poly_graph, ax, bank_type):
             count += 1
 
 
-def plot_chosen_radial_paths(graph, X, Y, P, Q, num_paths, cutoff_index = False):
+def plot_chosen_radial_paths(graph: nx.DiGraph, X: list, Y: list, P: list, Q: list, num_paths: int, cutoff_index: Union[int, bool] = False) -> None:
     """
     Produce a plot along a primary radial path for a user-specified region of the graph.
     Location is defined with the cursor.
