@@ -24,7 +24,9 @@ from .geometry import ensure_multipolygon, fix_geometry
 from .correlation import find_indices
 
 __all__ = [
-    "plot_graph", "plot_bars_from_centerline", "plot_bars_from_banks",
+    "plot_graph",
+    "compute_bars_from_centerline", "plot_bars_from_centerline",
+    "compute_bars_from_banks", "plot_bars_from_banks",
     "plot_migration_rate_map", "plot_curvature_map", "plot_age_map",
     "plot_bar_lines", "plot_bar_graphs", "plot_bars_by_bar_number",
     "plot_simple_polygon_graph", "plot_chosen_radial_paths", "fill_polygon",
@@ -63,9 +65,10 @@ def plot_graph(graph, ax, show_nodes = False, label_nodes = False):
     plt.axis('equal')
 
 
-def plot_bars_from_centerline(graph, cutoff_area, ax, W):
+def compute_bars_from_centerline(graph, cutoff_area, W):
     """
-    Create polygons for 'scroll' bars from channel centerline data and plotting them.
+    Compute channel/scroll-bar/cutoff polygons from centerline data (no
+    plotting).
 
     Parameters
     ----------
@@ -73,8 +76,6 @@ def plot_bars_from_centerline(graph, cutoff_area, ax, W):
         Centerline graph.
     cutoff_area : float
         Maximum continuous area (created through channel bank movement in one timestep) that is still considered a bar and not a cutoff.
-    ax : figure axes
-        Axes for plotting.
     W : float
         Channel width.
 
@@ -82,9 +83,9 @@ def plot_bars_from_centerline(graph, cutoff_area, ax, W):
     -------
     bars : list
         Shapely multipolygons representing 'scroll' bars that result from channel migration during one timestep.
-    chs : list 
+    chs : list
         Shapely polygons that represent channels through time.
-    all_chs : list 
+    all_chs : list
         Shapely polygons that represent merged channels through time.
     jumps : list
         Sometimes there is a gap between two consecutive channels and these gaps are collected into a list of polygons.
@@ -105,7 +106,6 @@ def plot_bars_from_centerline(graph, cutoff_area, ax, W):
     jumps = [] # gaps between channel polygons that are not cutoffs
     all_chs = [] # list of merged channels (to be used for erosion)
     cutoffs = []
-    cmap = mpl.colormaps['viridis']
     # creating list of channels, jumps, and cutoffs
     for i in trange(ts-1):
         ch1 = create_channel_polygon_from_centerline(X[i], Y[i], W)
@@ -124,15 +124,51 @@ def plot_bars_from_centerline(graph, cutoff_area, ax, W):
     chs.append(ch2) # append last channel
     # creating list of merged channels
     for i in trange(ts): # create list of merged channels
-        if i == 0: 
+        if i == 0:
             all_ch = chs[ts-1]
         else:
             all_ch = all_ch.union(chs[ts-i])
         all_chs.append(all_ch)
-    # creating scroll bars and plotting
+    # creating scroll bars
     for i in trange(ts): # create scroll bars
         bar = chs[i].difference(all_chs[ts-i-1]) # scroll bar defined by difference
         bars.append(bar)
+    return bars, chs, all_chs, jumps, cutoffs
+
+def plot_bars_from_centerline(graph, cutoff_area, ax, W):
+    """
+    Create polygons for 'scroll' bars from channel centerline data and plot them.
+
+    Parameters
+    ----------
+    graph : directed graph
+        Centerline graph.
+    cutoff_area : float
+        Maximum continuous area (created through channel bank movement in one timestep) that is still considered a bar and not a cutoff.
+    ax : figure axes
+        Axes for plotting.
+    W : float
+        Channel width.
+
+    Returns
+    -------
+    bars : list
+        Shapely multipolygons representing 'scroll' bars that result from channel migration during one timestep.
+    chs : list
+        Shapely polygons that represent channels through time.
+    all_chs : list
+        Shapely polygons that represent merged channels through time.
+    jumps : list
+        Sometimes there is a gap between two consecutive channels and these gaps are collected into a list of polygons.
+    cutoffs ; list
+        Shapely polygons that represent cutoffs.
+    """
+
+    bars, chs, all_chs, jumps, cutoffs = compute_bars_from_centerline(graph, cutoff_area, W)
+    ts = len(bars)
+    cmap = mpl.colormaps['viridis']
+    for i in range(ts):
+        bar = bars[i]
         color = cmap(i/float(ts))
         if type(bar) != Polygon:
             for b in bar.geoms:
@@ -146,20 +182,19 @@ def plot_bars_from_centerline(graph, cutoff_area, ax, W):
     return bars, chs, all_chs, jumps, cutoffs
 
 
-def plot_bars_from_banks(graph1, graph2, cutoff_area, ax):
+def compute_bars_from_banks(graph1, graph2, cutoff_area):
     """
-    Create polygons for 'scroll' bars from channel bankline data and plotting them.
+    Compute channel/scroll-bar/cutoff polygons from bankline data (no
+    plotting).
 
     Parameters
     ----------
-    graph : directed graph
-        Centerline graph.
+    graph1 : directed graph
+        Bankline graph.
+    graph2 : directed graph
+        Bankline graph.
     cutoff_area : float
         Maximum continuous area (created through channel bank movement in one timestep) that is still considered a bar and not a cutoff.
-    ax : figure axes
-        Axes for plotting.
-    W : float
-        Channel width.
 
     Returns
     -------
@@ -193,7 +228,6 @@ def plot_bars_from_banks(graph1, graph2, cutoff_area, ax):
     jumps = [] # gaps between channel polygons that are not cutoffs
     all_chs = [] # list of merged channels (to be used for erosion)
     cutoffs = []
-    cmap = mpl.colormaps['viridis']
     # creating list of channels, jumps, and cutoffs
     for i in trange(ts-1):
         ch1 = create_channel_polygon_from_banks(X1[i], Y1[i], X2[i], Y2[i])
@@ -208,15 +242,51 @@ def plot_bars_from_banks(graph1, graph2, cutoff_area, ax):
     chs.append(ch2) # append last channel
     # creating list of merged channels
     for i in trange(ts): # create list of merged channels
-        if i == 0: 
+        if i == 0:
             all_ch = chs[ts-1]
         else:
             all_ch = all_ch.union(chs[ts-i])
         all_chs.append(all_ch)
-    # creating scroll bars and plotting
+    # creating scroll bars
     for i in trange(ts): # create scroll bars
         bar = chs[i].difference(all_chs[ts-i-1]) # scroll bar defined by difference
         bars.append(bar)
+    return bars, chs, all_chs, jumps, cutoffs
+
+def plot_bars_from_banks(graph1, graph2, cutoff_area, ax):
+    """
+    Create polygons for 'scroll' bars from channel bankline data and plot them.
+
+    Parameters
+    ----------
+    graph1 : directed graph
+        Bankline graph.
+    graph2 : directed graph
+        Bankline graph.
+    cutoff_area : float
+        Maximum continuous area (created through channel bank movement in one timestep) that is still considered a bar and not a cutoff.
+    ax : figure axes
+        Axes for plotting.
+
+    Returns
+    -------
+    bars : list
+        Shapely multipolygons representing 'scroll' bars that result from channel migration during one timestep.
+    chs : list
+        Shapely polygons that represent channels through time.
+    all_chs : list
+        Shapely polygons that represent merged channels through time.
+    jumps : list
+        Sometimes there is a gap between two consecutive channels and these gaps are collected into a list of polygons.
+    cutoffs : list
+        Shapely polygons that represent cutoffs.
+    """
+
+    bars, chs, all_chs, jumps, cutoffs = compute_bars_from_banks(graph1, graph2, cutoff_area)
+    ts = len(bars)
+    cmap = mpl.colormaps['viridis']
+    for i in range(ts):
+        bar = bars[i]
         color = cmap(i/float(ts))
         if type(bar) != Polygon:
             for b in bar.geoms:
