@@ -979,7 +979,7 @@ def plot_bars_from_centerline(graph, cutoff_area, ax, W):
     jumps = [] # gaps between channel polygons that are not cutoffs
     all_chs = [] # list of merged channels (to be used for erosion)
     cutoffs = []
-    cmap = mpl.cm.get_cmap('viridis')
+    cmap = mpl.colormaps['viridis']
     # creating list of channels, jumps, and cutoffs
     for i in trange(ts-1):
         ch1 = create_channel_polygon_from_centerline(X[i], Y[i], W)
@@ -1165,7 +1165,7 @@ def plot_bars_from_banks(graph1, graph2, cutoff_area, ax):
     jumps = [] # gaps between channel polygons that are not cutoffs
     all_chs = [] # list of merged channels (to be used for erosion)
     cutoffs = []
-    cmap = mpl.cm.get_cmap('viridis')
+    cmap = mpl.colormaps['viridis']
     # creating list of channels, jumps, and cutoffs
     for i in trange(ts-1):
         ch1 = create_channel_polygon_from_banks(X1[i], Y1[i], X2[i], Y2[i])
