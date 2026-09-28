@@ -1871,7 +1871,7 @@ def plot_bar_lines(wbar, graph1, graph2, ax):
                 y1 = line.xy[1]
                 ax.plot(x1, y1, color=cmap(0), linewidth=0.5)
             else:
-                for l in line:
+                for l in line.geoms:
                     x1 = l.xy[0]
                     y1 = l.xy[1]
                     ax.plot(x1, y1, color=cmap(0), linewidth=0.5)
@@ -1901,7 +1901,7 @@ def plot_bar_lines(wbar, graph1, graph2, ax):
                     y1 = line.xy[1]
                     ax.plot(x1, y1, color=cmap(1), linewidth=0.5)
                 else:
-                    for l in line:
+                    for l in line.geoms:
                         x1 = l.xy[0]
                         y1 = l.xy[1]
                         ax.plot(x1, y1, color=cmap(1), linewidth=0.5)
