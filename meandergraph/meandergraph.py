@@ -1630,7 +1630,7 @@ def plot_migration_rate_map(wbar, graph1, graph2, vmin, vmax, ax):
                 facecolor = m.to_rgba(length/time_step * wbar.bar_graph.nodes[node]['direction']), 
                 edgecolor='k', linewidth=0.25)
 
-def plot_curvature_map(wbar, vmin, vmax, W, ax):
+def plot_curvature_map(wbar, vmin, vmax, W, ax, cmap='coolwarm'):
     """
     Make a spatial plot of curvature.
 
@@ -1638,18 +1638,19 @@ def plot_curvature_map(wbar, vmin, vmax, W, ax):
     ----------
     wbar : bar object
     vmin : float
-        Minimum value of curvature (for scaling)
+        Minimum value of dimensionless curvature (W * curvature), for scaling.
+        Use a negative vmin (e.g., -vmax) so that both curvature signs are shown.
     vmax : float
-        Maximum value of curvature (for scaling)
+        Maximum value of dimensionless curvature (for scaling)
     W : int/float
         Width (meters)
-    cmap: str 
-        Matplotlib cmap object
     ax : int
         Axes for plotting
+    cmap: str
+        Matplotlib colormap name; a diverging colormap shows the two curvature signs
     """
     norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
-    m = mpl.cm.ScalarMappable(norm=norm, cmap='Reds')
+    m = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
     for node in wbar.bar_graph.nodes:
         if type(wbar.bar_graph.nodes[node]['poly']) == Polygon:
             ax.fill(wbar.bar_graph.nodes[node]['poly'].exterior.xy[0], 
