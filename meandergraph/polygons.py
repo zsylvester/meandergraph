@@ -22,7 +22,7 @@ from tqdm import trange
 from shapely.geometry import Polygon, MultiPolygon, MultiLineString, LineString, JOIN_STYLE, GeometryCollection
 from shapely.geometry.polygon import LinearRing
 
-from .graph import find_longitudinal_path, find_radial_path, add_edge_directions_to_bank_graph
+from .graph import find_longitudinal_path, find_radial_path, add_edge_directions_to_bank_graph, radial_successor, channel_successor
 from .geometry import fix_geometry, compute_distance, directionOfPoint, ensure_multipolygon
 
 __all__ = [
@@ -63,34 +63,21 @@ def create_polygon_graph(graph):
         for i in range(len(path) - 1):
             node_1 = path[i]
             node_2 = path[i+1]
-            node_1_children = list(graph.successors(node_1))
-            node_2_children = list(graph.successors(node_2))
-            node_3 = False
-            node_4 = False
-            for n in node_1_children:
-                if graph[node_1][n]['edge_type'] == 'radial':
-                    node_4 = n
-            for n in node_2_children:
-                if graph[node_2][n]['edge_type'] == 'radial':
-                    node_3 = n
+            node_4 = radial_successor(graph, node_1)
+            node_3 = radial_successor(graph, node_2)
             if (not node_3) and (i < len(path) - 2):
                 count = 2
                 while node_3 is False:
                     node_2 = path[i+count]
                     node_2_children = list(graph.successors(node_2))
                     if len(node_2_children) > 0:
-                        for n in node_2_children:
-                            if graph[node_2][n]['edge_type'] == 'radial':
-                                node_3 = n
-                            else:
-                                count+=1
+                        node_3 = radial_successor(graph, node_2)
+                        if not node_3:
+                            count += 1
                     else:
                         break
             if (not node_4) and node_3 and (i < len(path) - 2):
-                node_3_children = list(graph.successors(node_3))
-                for n in node_3_children:
-                    if graph[node_3][n]['edge_type'] == 'channel':
-                        node_4 = n
+                node_4 = channel_successor(graph, node_3)
             if node_3 and node_4: # only add a new polygon if there is another centerline
                 coords = []
                 poly1 = False
@@ -601,16 +588,8 @@ def create_simple_polygon_graph(bank_graph, X):
         for i in range(len(path) - 1):
             node_1 = path[i]
             node_2 = path[i+1]
-            node_1_children = list(graph.successors(node_1))
-            node_2_children = list(graph.successors(node_2))
-            node_3 = False
-            node_4 = False
-            for n in node_1_children:
-                if graph[node_1][n]['edge_type'] == 'radial':
-                    node_4 = n
-            for n in node_2_children:
-                if graph[node_2][n]['edge_type'] == 'radial':
-                    node_3 = n
+            node_4 = radial_successor(graph, node_1)
+            node_3 = radial_successor(graph, node_2)
             if node_3 and node_4: # nodes 1, 2, 3
                 x1 = graph.nodes[node_1]['x']
                 y1 = graph.nodes[node_1]['y']
