@@ -270,7 +270,17 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, smoothing_fa
     cl_indices = [] # list of lists to store *centerline* indices that will be part of the graph
     n_centerlines = len(X)
     for i in range(n_centerlines): # initialize 'cl_indices'
-        cl_indices.append([]) 
+        cl_indices.append([])
+    # maps (centerline index, point index along that centerline) -> node id,
+    # populated as nodes are created below, so channel edges can be added by
+    # a dict lookup instead of a linear (x, y) float-equality search. DTW
+    # correlation is many-to-one near sequence boundaries, so more than one
+    # radial trajectory can land on the same (centerline, point index); when
+    # that happens the *first* trajectory to claim a slot stays canonical
+    # (matching what the old coordinate-equality search always resolved to,
+    # since it scanned nodes in insertion order) -- hence setdefault, not a
+    # plain assignment.
+    node_lookup = {}
     # add radial nodes and edges:
     print('add radial nodes and edges...')
     for ind1 in trange(0, len(X[0]), n_points):
@@ -279,10 +289,11 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, smoothing_fa
         for i in range(len(indices)):
             cl_indices[i].append(indices[i])
             graph.add_node(new_node_inds[i], x = x[i], y = y[i], age = i, curv = 0)
+            node_lookup.setdefault((i, indices[i]), new_node_inds[i])
         for i in range(len(indices)-1):
             graph.add_edge(new_node_inds[i], new_node_inds[i+1], edge_type = 'radial', age = i)
     print('add intermediate trajectories...')
-    for cl_number in trange(n_centerlines - 1): 
+    for cl_number in trange(n_centerlines - 1):
         large_gap_inds = np.where(np.diff(cl_indices[cl_number]) > 2*n_points) # find gaps that are longer than 2 x the number of points
         if len(large_gap_inds) > 0:
             large_inds = large_gap_inds[0]
@@ -294,11 +305,12 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, smoothing_fa
                 for i in range(len(indices)):
                     cl_indices[cl_number+i].append(indices[i]) # add indices of new nodes to list of indices of centerline nodes
                     graph.add_node(new_node_inds[i], x = x[i], y = y[i], age = cl_number + i) # add new nodes to graph
+                    node_lookup.setdefault((cl_number+i, indices[i]), new_node_inds[i])
                 for i in range(len(indices)-1):
                     graph.add_edge(new_node_inds[i], new_node_inds[i+1], edge_type = 'radial') # add new edges to graph
             for i in range(cl_number, n_centerlines):
                 cl_indices[i].sort() # sort indices of all nodes along current centerline
-    # add edges that represent centerlines:            
+    # add edges that represent centerlines:
     x = []
     y = []
     for node in graph.nodes:
@@ -310,10 +322,7 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, smoothing_fa
     graph.graph['y'] = y
     print('add centerline edges...')
     for cl_number in trange(n_centerlines):
-        cl_nodes = []
-        for i in cl_indices[cl_number]:
-            node_ind = np.where((x == X[cl_number][i]) & (y == Y[cl_number][i]))[0][0]
-            cl_nodes.append(node_ind)
+        cl_nodes = [node_lookup[(cl_number, i)] for i in cl_indices[cl_number]]
         for i in range(len(cl_nodes) - 1):
             graph.add_edge(cl_nodes[i], cl_nodes[i+1], edge_type = 'channel')
     # a few edges are linking nodes to themselves, and they need to be removed:
