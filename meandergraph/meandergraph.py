@@ -880,13 +880,13 @@ def create_polygon_graph(graph):
                     if poly.is_valid: # add node only if polygon is valid
                         poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1, length = length, width = width, direction = direction, timestep = ts, migr_rate = 0.5*(dist_14 + dist_23)/ts, curv = curvature_12)
                     else:
-                        poly = poly.buffer(0) # fix the invalid polygon
+                        poly = fix_geometry(poly)
                         poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1, length = length, width = width, direction = direction, timestep = ts, migr_rate = 0.5*(dist_14 + dist_23)/ts, curv = curvature_12)
                     if i == 0:
                         if poly.is_valid:
                             cl_start_nodes.append(path[i])
                         else:
-                            poly = poly.buffer(0) # fix the invalid polygon
+                            poly = fix_geometry(poly)
                             poly_graph.add_node(path[i], poly = poly, age = age, x = x1, y = y1, length = length, width = width, direction = direction, timestep = ts, migr_rate = 0.5*(dist_14 + dist_23)/ts, curv = curvature_12)
                             cl_start_nodes.append(path[i])
             else:
@@ -1046,7 +1046,7 @@ def create_channel_polygon_from_centerline(x, y, W):
         coords.append((xm[i],ym[i]))
     ch = Polygon(LinearRing(coords))
     if not ch.is_valid:
-        ch = ch.buffer(0)
+        ch = fix_geometry(ch)
     return ch
 
 def create_channel_polygon_from_banks(x1, y1, x2, y2):
@@ -1077,7 +1077,7 @@ def create_channel_polygon_from_banks(x1, y1, x2, y2):
         coords.append((xm[i], ym[i]))
     ch = Polygon(LinearRing(coords))
     if not ch.is_valid:
-        ch = ch.buffer(0)
+        ch = fix_geometry(ch)
     return ch
 
 def get_channel_banks(x,y,W):
@@ -2634,7 +2634,7 @@ class Bar:
                                 except GEOSException:
                                     poly = graph.nodes[node]['poly']
                             else:
-                                poly = self.polygon.intersection(graph.nodes[node]['poly'].buffer(0))
+                                poly = self.polygon.intersection(fix_geometry(graph.nodes[node]['poly']))
                             if graph.nodes[node]['poly'].difference(scroll.polygon).area > 0: #accounting for intra-point bar erosion
                                 poly = scroll.polygon.intersection(graph.nodes[node]['poly'])
                             if poly.area > 0:
@@ -2662,9 +2662,9 @@ class Bar:
                     poly1 = bar_graph.nodes[node1]['poly']
                     poly2 = bar_graph.nodes[node2]['poly']
                     if not poly1.is_valid:
-                        poly1 = poly1.buffer(0)
+                        poly1 = fix_geometry(poly1)
                     if not poly2.is_valid:
-                        poly2 = poly2.buffer(0)
+                        poly2 = fix_geometry(poly2)
                     try:
                         if poly1.relate(poly2) == 'FF2F11212':
                             bar_radial_graph.add_edge(node1, node2, edge_type = 'radial')
