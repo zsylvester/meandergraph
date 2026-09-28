@@ -153,11 +153,19 @@ def create_scrolls_and_find_connected_scrolls(graph1, graph2, cutoff_area):
     connections = []
     for n in range(1,10): # outer loop used for fluctuations of centerlines to ensure they are part of the same 'bar'
         for i in trange(n, len(bars)): # start at 'n' so that 'i-n' does not wrap around to the end of the list
+            if (type(bars[i-n]) == MultiPolygon) and (type(bars[i]) == MultiPolygon):
+                # both sides have multiple scrolls -- this is the O(n_scrolls[i] *
+                # n_scrolls[i-n]) hot path, so prune candidate pairs with an
+                # STRtree bbox query before the exact (buffered) overlaps() check
+                in_polys = list(bars[i-n].geoms)
+                in_buffered = [p.buffer(1.0) for p in in_polys]
+                tree = STRtree(in_buffered)
+                for j, poly_j in enumerate(bars[i].geoms):
+                    for k in tree.query(poly_j):
+                        if in_buffered[k].overlaps(poly_j):
+                            connections.append((sum(n_scrolls[:i]) + j, sum(n_scrolls[:i-n]) + k))
             for j in range(n_scrolls[i]):
                 for k in range(n_scrolls[i-n]):
-                    if (type(bars[i-n]) == MultiPolygon) and (type(bars[i]) == MultiPolygon):
-                        if bars[i-n].geoms[k].buffer(1.0).overlaps(bars[i].geoms[j]):
-                            connections.append((sum(n_scrolls[:i]) + j, sum(n_scrolls[:i-n]) + k))
                     if (type(bars[i-n]) == Polygon) and (type(bars[i]) == MultiPolygon):
                         if bars[i-n].buffer(1.0).overlaps(bars[i].geoms[j]):
                             connections.append((sum(n_scrolls[:i]) + j, sum(n_scrolls[:i-n]) + 1))
