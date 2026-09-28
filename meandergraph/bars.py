@@ -554,17 +554,21 @@ class Bar:
                         [self.bar_radial_graph.nodes[s]['y'], self.bar_radial_graph.nodes[e]['y']], 
                         'g', linewidth = 1)
         fill_polygon(self.polygon, ax, facecolor='none', edgecolor='k', linewidth = 2)
-    def create_merged_polygons(self, ax, min_area):
+    def compute_merged_polygons(self, min_area):
         """
-        Create merged bar polygons 
+        Compute merged bar polygons (no plotting); sets and returns
+        self.merged_polygons.
 
         Parameters
         ----------
-        ax : int
-            Axes for plotting
         min_area : float
             Minimum allowable area of a shapely polygon
-        """ 
+
+        Returns
+        -------
+        polys : list of shapely Polygon
+            The merged polygons (same object as self.merged_polygons).
+        """
         source_nodes = []
         for node in self.bar_radial_graph.nodes:
             if self.bar_radial_graph.in_degree(node) == 0:
@@ -584,10 +588,23 @@ class Bar:
                 nodes = find_next_node(self.bar_radial_graph, list(self.bar_radial_graph.successors(node))[1])
                 sparse_inds = find_sparse_inds(self.bar_graph, nodes, min_area)
                 polys = merge_polygons(self.bar_graph, nodes, sparse_inds, polys)
+        self.merged_polygons = polys
+        return polys
+    def create_merged_polygons(self, ax, min_area):
+        """
+        Create merged bar polygons and plot them.
+
+        Parameters
+        ----------
+        ax : int
+            Axes for plotting
+        min_area : float
+            Minimum allowable area of a shapely polygon
+        """
+        polys = self.compute_merged_polygons(min_area)
         for poly in polys:
             fill_polygon(poly, ax, facecolor='none', edgecolor='k', linewidth=0.5)
         fill_polygon(self.polygon, ax, facecolor='none', edgecolor='b', linewidth=2)
-        self.merged_polygons = polys
     def add_bank_type(self):
         """
         Add bank_type attribute, either 'left' or 'right'
