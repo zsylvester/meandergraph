@@ -1,6 +1,6 @@
 # meandergraph
 
-<img src="https://github.com/zsylvester/meandergraph/blob/main/meander_graph_1.svg" width="800">
+<img src="docs/images/meander_graph_1.svg" width="800">
 
 ## Description
 
