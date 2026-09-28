@@ -1,0 +1,22 @@
+name: meandergraph
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python
+  - numpy
+  - matplotlib
+  - pyqt
+  - pandas
+  - jupyterlab
+  - scipy
+  - scikit-image
+  - librosa
+  - tqdm
+  - networkx
+  - shapely
+  - h5py
+  - pip
+  - pip:
+    - pillow
