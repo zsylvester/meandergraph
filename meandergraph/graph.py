@@ -46,7 +46,7 @@ __all__ = [
     "radial_successor", "channel_successor",
 ]
 
-def radial_successor(graph, node):
+def radial_successor(graph: nx.DiGraph, node: int) -> Union[int, bool]:
     """
     Find the successor of 'node' reached by a 'radial' edge.
 
@@ -69,7 +69,7 @@ def radial_successor(graph, node):
             successor = n
     return successor
 
-def channel_successor(graph, node):
+def channel_successor(graph: nx.DiGraph, node: int) -> Union[int, bool]:
     """
     Find the successor of 'node' reached by a 'channel' edge.
 
@@ -92,7 +92,7 @@ def channel_successor(graph, node):
             successor = n
     return successor
 
-def find_radial_path(graph, node):
+def find_radial_path(graph: nx.DiGraph, node: int) -> Tuple[List[int], List[int]]:
     """
     Collect the indices of graph nodes that describe a radial path starting from 'node'.
 
@@ -131,7 +131,7 @@ def find_radial_path(graph, node):
     return path, path_ages
 
 
-def find_radial_path_backward(graph, node):
+def find_radial_path_backward(graph: nx.DiGraph, node: int) -> Tuple[List[int], List[int]]:
     """
     Collect the indices of graph nodes that describe a radial path starting from 'node', going backward.
 
@@ -170,7 +170,7 @@ def find_radial_path_backward(graph, node):
     return path, path_ages
 
 
-def find_longitudinal_path(graph, node):
+def find_longitudinal_path(graph: nx.DiGraph, node: int) -> List[int]:
     """
     Collect the indices of graph nodes that describe a longitudinal path starting from 'node'.
 
@@ -208,7 +208,7 @@ def find_longitudinal_path(graph, node):
     return path
 
 
-def create_list_of_start_nodes(graph):
+def create_list_of_start_nodes(graph: nx.DiGraph) -> List[int]:
     """
     Find all the nodes in a graph that are starting points for radial paths.
 
@@ -234,7 +234,7 @@ def create_list_of_start_nodes(graph):
     return start_nodes
 
 
-def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, smoothing_factor = 51, remove_cutoff_edges = False, timesteps = None, clean_up_centerlines = True):
+def create_graph_from_channel_lines(X: List[np.ndarray], Y: List[np.ndarray], P: List[np.ndarray], Q: List[np.ndarray], n_points: int, max_dist: float, smoothing_factor: int = 51, remove_cutoff_edges: bool = False, timesteps: Optional[list] = None, clean_up_centerlines: bool = True) -> nx.DiGraph:
     """
     Create directed graph from a set of cghannel center- or bank lines.
 
@@ -383,7 +383,7 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, smoothing_fa
     return graph
 
 
-def reconnect_nodes_along_centerline(graph1, graph2, cl_number):
+def reconnect_nodes_along_centerline(graph1: nx.DiGraph, graph2: nx.DiGraph, cl_number: int) -> None:
     """
     Reconnect nodes along a centerline in graph2, based on nodes along the same centerline in graph1
 
@@ -408,7 +408,7 @@ def reconnect_nodes_along_centerline(graph1, graph2, cl_number):
             graph2.add_edge(cl_nodes[i], cl_nodes[i+1], edge_type = 'channel')
 
 
-def remove_high_density_nodes(graph1, min_dist, max_dist):
+def remove_high_density_nodes(graph1: nx.DiGraph, min_dist: float, max_dist: float) -> nx.DiGraph:
     """
     Remove nodes and edges where radial lines are too dense (especially after cutoffs).
 
@@ -486,7 +486,7 @@ def remove_high_density_nodes(graph1, min_dist, max_dist):
     return graph2
 
 
-def add_curvature_to_line_graph(graph, smoothing_factor):
+def add_curvature_to_line_graph(graph: nx.DiGraph, smoothing_factor: int) -> None:
     """
     Add curvature attribute to the nodes of a line graph.
 
@@ -513,7 +513,7 @@ def add_curvature_to_line_graph(graph, smoothing_factor):
             graph.nodes[node]['curv'] = np.nan
 
 
-def add_timesteps_to_line_graph(graph, timesteps):
+def add_timesteps_to_line_graph(graph: nx.DiGraph, timesteps: list) -> None:
     """
     Add timestep attribute to the nodes of a line graph, representing the amount of time between successive longitudinal paths.
     These timesteps could come from Landsat timestamps
@@ -537,7 +537,7 @@ def add_timesteps_to_line_graph(graph, timesteps):
             graph.nodes[node]['timestep'] = np.nan
 
 
-def find_next_node(graph, start_node):
+def find_next_node(graph: nx.DiGraph, start_node: int) -> List[int]:
     """
     Find the next node along radial path.
 
@@ -563,7 +563,7 @@ def find_next_node(graph, start_node):
     return nodes
 
 
-def add_sparse_cutoff_nodes(graph, min_dist):
+def add_sparse_cutoff_nodes(graph: nx.DiGraph, min_dist: float) -> None:
     """
     Add a sparse_cutoff_nodes attribute to bar graph.
 
@@ -603,7 +603,7 @@ def add_sparse_cutoff_nodes(graph, min_dist):
     graph.graph['sparse_cutoff_nodes'] = sparse_cutoff_nodes
 
 
-def find_radial_path_2(graph, node):
+def find_radial_path_2(graph: nx.DiGraph, node: int) -> List[int]:
     """
     Make a list of the indices of graph nodes that describe a radial path starting from 'node'
     (same as 'find_radial_path', but without the node ages)
@@ -624,7 +624,7 @@ def find_radial_path_2(graph, node):
     return path
 
 
-def add_edge_directions_to_bank_graph(graph):
+def add_edge_directions_to_bank_graph(graph: nx.DiGraph) -> nx.DiGraph:
     """
     Add directionality to graph nodes as a 'direction' attribute.
 
@@ -669,7 +669,7 @@ def add_edge_directions_to_bank_graph(graph):
     return graph
 
 
-def find_cutoff_ages(graph):
+def find_cutoff_ages(graph: nx.DiGraph) -> np.ndarray:
     """
     Find the timestep corresponding to cutoff event(s).
 

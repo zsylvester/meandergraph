@@ -3,12 +3,13 @@ Shared low-level geometry helpers used across the correlation, graph,
 polygon, and bar-building submodules.
 """
 from shapely.geometry import Polygon, MultiPolygon, GeometryCollection
+from shapely.geometry.base import BaseGeometry
 
 __all__ = ["fix_geometry", "compute_distance", "directionOfPoint", "ensure_multipolygon"]
 
-def fix_geometry(geom):
+def fix_geometry(geom: BaseGeometry) -> BaseGeometry:
     """Attempt to fix invalid geometries"""
-    
+
     if not geom.is_valid:
 
         # Try buffer(0) - often fixes self-intersections and topology issues
@@ -33,7 +34,7 @@ def fix_geometry(geom):
     return geom
 
 
-def compute_distance(x1, x2, y1, y2):
+def compute_distance(x1: float, x2: float, y1: float, y2: float) -> float:
     """
     Compute the distance between two nodes.
 
@@ -58,7 +59,7 @@ def compute_distance(x1, x2, y1, y2):
     return dist
 
 
-def directionOfPoint(xa, ya, xb, yb, xp, yp):
+def directionOfPoint(xa: float, ya: float, xb: float, yb: float, xp: float, yp: float) -> int:
     """
     Compute the directionality between two points. 
 
@@ -100,7 +101,7 @@ def directionOfPoint(xa, ya, xb, yb, xp, yp):
     return 0
 
 
-def ensure_multipolygon(geom):
+def ensure_multipolygon(geom: BaseGeometry) -> MultiPolygon:
     """
     Return 'geom' as a MultiPolygon: wrap a single Polygon, and drop any
     non-polygon parts of a GeometryCollection (points and lines from

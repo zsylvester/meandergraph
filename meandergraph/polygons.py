@@ -16,6 +16,8 @@ nodes carry ``node_type`` (``'channel'`` or ``'radial'``), ``x``/``y``,
 and (radial nodes only, once a polygon is found) ``poly``/``direction``;
 edges carry ``edge_type`` (``'channel'`` or ``'radial'``).
 """
+from typing import List, Tuple, Union
+
 import numpy as np
 import networkx as nx
 from tqdm import trange
@@ -32,7 +34,7 @@ __all__ = [
     "create_simple_polygon_graph",
 ]
 
-def create_polygon_graph(graph):
+def create_polygon_graph(graph: nx.DiGraph) -> nx.DiGraph:
     """
     Create graph of polygons from centerline / bankline graph.
 
@@ -219,7 +221,7 @@ def create_polygon_graph(graph):
     return poly_graph
 
 
-def create_channel_polygon_from_centerline(x, y, W):
+def create_channel_polygon_from_centerline(x: np.ndarray, y: np.ndarray, W: float) -> Polygon:
     """
     Create a channel polygon from the centerline coordinates.
 
@@ -248,7 +250,7 @@ def create_channel_polygon_from_centerline(x, y, W):
     return ch
 
 
-def create_channel_polygon_from_banks(x1, y1, x2, y2):
+def create_channel_polygon_from_banks(x1: np.ndarray, y1: np.ndarray, x2: np.ndarray, y2: np.ndarray) -> Polygon:
     """
     Create a channel polygon from the bankline coordinates.
 
@@ -280,7 +282,7 @@ def create_channel_polygon_from_banks(x1, y1, x2, y2):
     return ch
 
 
-def get_channel_banks(x,y,W):
+def get_channel_banks(x: np.ndarray, y: np.ndarray, W: float) -> Tuple[np.ndarray, np.ndarray]:
     """
     Find coordinates of channel banks, given a centerline and a channel width.
 
@@ -321,7 +323,7 @@ def get_channel_banks(x,y,W):
     return xm, ym
 
 
-def one_step_difference_no_plot(ch1, ch2, cutoff_area):
+def one_step_difference_no_plot(ch1: Polygon, ch2: Polygon, cutoff_area: float) -> Tuple[Union[Polygon, MultiPolygon], MultiPolygon, MultiPolygon, Union[Polygon, MultiPolygon], List[Polygon]]:
     """
     Create polygons from one time step of channel migration, as defined by two consecutive channel polygons, without plotting them.
 
@@ -412,7 +414,7 @@ def one_step_difference_no_plot(ch1, ch2, cutoff_area):
     return ch1, bar, erosion, jump, cutoffs
 
 
-def one_step_difference_no_jump(ch1, ch2, cutoff_area):
+def one_step_difference_no_jump(ch1: Polygon, ch2: Polygon, cutoff_area: float) -> Tuple[Polygon, MultiPolygon, MultiPolygon, List[Polygon]]:
     """
     Create polygons from one time step of channel migration, as defined by two consecutive channel polygons, without plotting them.
 
@@ -478,7 +480,7 @@ def one_step_difference_no_jump(ch1, ch2, cutoff_area):
     return ch1, bar, erosion, cutoffs
 
 
-def create_simple_polygon_graph(bank_graph, X):
+def create_simple_polygon_graph(bank_graph: nx.DiGraph, X: list) -> nx.DiGraph:
     """
     Make a polygon graph consisting of nodes and edges
 

@@ -6,11 +6,12 @@ bankline graphs.
 import logging
 import random
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import List, Tuple, Optional, Union
 import numpy as np
 import networkx as nx
 from tqdm import trange, tqdm
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
 from shapely import STRtree
 from shapely.geometry import Polygon, MultiPolygon, LineString, JOIN_STYLE
 from shapely.ops import unary_union
@@ -31,7 +32,7 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-def merge_polygons(graph, nodes, sparse_inds, polys):
+def merge_polygons(graph: nx.Graph, nodes: list, sparse_inds: list, polys: list) -> list:
     """
     Merge polygons.
 
@@ -62,7 +63,7 @@ def merge_polygons(graph, nodes, sparse_inds, polys):
     return polys
 
 
-def find_sparse_inds(graph, nodes, min_area):
+def find_sparse_inds(graph: nx.Graph, nodes: list, min_area: float) -> list:
     """
     Make a list of sparse indicies.
 
@@ -95,7 +96,7 @@ def find_sparse_inds(graph, nodes, min_area):
     return sparse_inds
 
 
-def compute_scrolls_and_connections(graph1, graph2, cutoff_area):
+def compute_scrolls_and_connections(graph1: nx.DiGraph, graph2: nx.DiGraph, cutoff_area: float) -> Tuple[list, list, list, nx.Graph]:
     """
     Compute 'scroll' objects and which of them are connected into the same
     bar (no plotting).
@@ -181,7 +182,7 @@ def compute_scrolls_and_connections(graph1, graph2, cutoff_area):
 
     return scrolls, scroll_ages, cutoffs, all_bars_graph
 
-def create_scrolls_and_find_connected_scrolls(graph1, graph2, cutoff_area):
+def create_scrolls_and_find_connected_scrolls(graph1: nx.DiGraph, graph2: nx.DiGraph, cutoff_area: float) -> Tuple[list, list, list, nx.Graph]:
     """
     Make a list of 'scroll' objects and plot them, colored by which bar
     (connected component) they belong to.
@@ -221,7 +222,7 @@ def create_scrolls_and_find_connected_scrolls(graph1, graph2, cutoff_area):
     return scrolls, scroll_ages, cutoffs, all_bars_graph
 
 
-def create_polygon_graphs_and_bar_graphs(graph1, graph2, all_bars_graph, scrolls, scroll_ages, X1, Y1, X2, Y2, min_area):
+def create_polygon_graphs_and_bar_graphs(graph1: nx.DiGraph, graph2: nx.DiGraph, all_bars_graph: nx.Graph, scrolls: list, scroll_ages: list, X1: list, Y1: list, X2: list, Y2: list, min_area: float) -> Tuple[list, nx.DiGraph, nx.DiGraph]:
     """
     Make a directed graphs that contain shapely polygons representing the banks,
     and add these graphs to 'bar' objects.
@@ -305,7 +306,7 @@ def create_polygon_graphs_and_bar_graphs(graph1, graph2, all_bars_graph, scrolls
     return wbars, poly_graph_1, poly_graph_2
 
 
-def polygon_width_and_length(graph, node):
+def polygon_width_and_length(graph: nx.DiGraph, node: int) -> Tuple[float, float]:
     """
     Compute the width and length of the polygon that starts at 'node' in a bank graph.
 
@@ -383,7 +384,7 @@ def polygon_width_and_length(graph, node):
     return 0.5*(width_1 + width_2), 0.5*(length_1 + length_2)
 
 
-def add_polygon_width_and_length(wbars, graph1, graph2):
+def add_polygon_width_and_length(wbars: List["Bar"], graph1: nx.DiGraph, graph2: nx.DiGraph) -> None:
     for wbar in tqdm(wbars):
         if wbar.scrolls[-1].bank == 'left':
             graph = graph2
@@ -432,7 +433,7 @@ class Bar:
     merged_polygons: Optional[List[Polygon]] = None
     bank_type: Optional[str] = None
 
-    def plot(self, ax, color):
+    def plot(self, ax: Axes, color) -> None:
         """
         Make bar and scroll plot.
 
@@ -446,7 +447,7 @@ class Bar:
         fill_polygon(self.polygon, ax, facecolor='w', edgecolor='k', linewidth=2)
         for scroll in self.scrolls:
             fill_polygon(scroll.polygon, ax, facecolor=color, edgecolor='k', linewidth=0.5)
-    def create_polygon(self):
+    def create_polygon(self) -> None:
         """
         Create bar polygon from component scrolls
         """
@@ -456,7 +457,7 @@ class Bar:
             whole_bar = unary_union([whole_bar, scroll.polygon])
         whole_bar = whole_bar.buffer(0.1, 1, join_style=JOIN_STYLE.mitre).buffer(-0.1, 1, join_style=JOIN_STYLE.mitre)
         self.polygon = whole_bar
-    def add_polygon_graphs(self, graph):
+    def add_polygon_graphs(self, graph: nx.DiGraph) -> None:
         """
         Add polygon graphs to bars.
 
@@ -529,7 +530,7 @@ class Bar:
                         logger.warning("relate() failed for polygon-graph nodes %s, %s", node1, node2)
         self.bar_graph = bar_graph
         self.bar_radial_graph = bar_radial_graph
-    def plot_polygons(self, ax, plot_graphs):
+    def plot_polygons(self, ax: Axes, plot_graphs: bool) -> None:
         """
         Plot bar polygons 
 
@@ -557,7 +558,7 @@ class Bar:
                         [self.bar_radial_graph.nodes[s]['y'], self.bar_radial_graph.nodes[e]['y']], 
                         'g', linewidth = 1)
         fill_polygon(self.polygon, ax, facecolor='none', edgecolor='k', linewidth = 2)
-    def compute_merged_polygons(self, min_area):
+    def compute_merged_polygons(self, min_area: float) -> list:
         """
         Compute merged bar polygons (no plotting); sets and returns
         self.merged_polygons.
@@ -593,7 +594,7 @@ class Bar:
                 polys = merge_polygons(self.bar_graph, nodes, sparse_inds, polys)
         self.merged_polygons = polys
         return polys
-    def create_merged_polygons(self, ax, min_area):
+    def create_merged_polygons(self, ax: Axes, min_area: float) -> None:
         """
         Create merged bar polygons and plot them.
 
@@ -608,7 +609,7 @@ class Bar:
         for poly in polys:
             fill_polygon(poly, ax, facecolor='none', edgecolor='k', linewidth=0.5)
         fill_polygon(self.polygon, ax, facecolor='none', edgecolor='b', linewidth=2)
-    def add_bank_type(self):
+    def add_bank_type(self) -> None:
         """
         Add bank_type attribute, either 'left' or 'right'
         """
