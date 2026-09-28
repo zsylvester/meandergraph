@@ -90,85 +90,41 @@ def create_polygon_graph(graph):
                     outer_poly_boundary = nx.shortest_path(graph, source=node_4, target=node_3)
                 except (nx.NetworkXNoPath, nx.NodeNotFound): # if there is no path between node 4 and node 3
                     outer_poly_boundary = []
-                # sometimes 'node_3' and 'node_4' are the same node, and this is needed:
                 if (graph.nodes[node_3]['x'] == graph.nodes[node_4]['x']) and (graph.nodes[node_3]['y'] == graph.nodes[node_4]['y']):
-                    x3 = graph.nodes[node_3]['x']
-                    x4 = graph.nodes[node_4]['x']
-                    y3 = graph.nodes[node_3]['y']
-                    y4 = graph.nodes[node_4]['y']
+                    # sometimes 'node_3' and 'node_4' are the same node
+                    x3, y3 = graph.nodes[node_3]['x'], graph.nodes[node_3]['y']
+                    x4, y4 = graph.nodes[node_4]['x'], graph.nodes[node_4]['y']
                     coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x1, y1)]
-                    width_2 = compute_distance(x3, x4, y3, y4)
+                    width_2 = 0.0
                     length_1 = compute_distance(x1, x4, y1, y4)
                     length_2 = compute_distance(x2, x3, y2, y3)
-                if len(outer_poly_boundary) == 2: # 2 nodes on the outer boundary
-                    x3 = graph.nodes[node_3]['x']
-                    x4 = graph.nodes[node_4]['x']
-                    y3 = graph.nodes[node_3]['y']
-                    y4 = graph.nodes[node_4]['y']
-                    line1 = LineString([[x1, y1], [x2, y2]])
-                    line2 = LineString([[x3, y3], [x4, y4]])
-                    if line1.intersects(line2):
-                        x0 = line1.intersection(line2).x
-                        y0 = line1.intersection(line2).y
-                        coords = [(x1, y1), (x0, y0), (x4, y4)]
-                        poly1 = Polygon(LinearRing(coords))
-                        coords = [(x0, y0), (x3, y3), (x2, y2)]
-                        poly2 = Polygon(LinearRing(coords))
-                    else:
-                        coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x1, y1)]
-                    width_2 = compute_distance(x3, x4, y3, y4)
+                elif len(outer_poly_boundary) >= 2:
+                    # outer boundary running from node_3 (near node_2) to node_4
+                    # (near node_1) -- the reverse of shortest_path's
+                    # source=node_4, target=node_3 order:
+                    outer_nodes = outer_poly_boundary[::-1]
+                    outer_xy = [(graph.nodes[n]['x'], graph.nodes[n]['y']) for n in outer_nodes]
+                    x3, y3 = outer_xy[0]
+                    x4, y4 = outer_xy[-1]
+                    width_2 = sum(
+                        compute_distance(xa, xb, ya, yb)
+                        for (xa, ya), (xb, yb) in zip(outer_xy[:-1], outer_xy[1:])
+                    )
                     length_1 = compute_distance(x1, x4, y1, y4)
                     length_2 = compute_distance(x2, x3, y2, y3)
-                if len(outer_poly_boundary) == 3: # 3 nodes on the outer boundary
-                    x3 = graph.nodes[outer_poly_boundary[2]]['x']
-                    x4 = graph.nodes[outer_poly_boundary[1]]['x']
-                    x5 = graph.nodes[outer_poly_boundary[0]]['x']
-                    y3 = graph.nodes[outer_poly_boundary[2]]['y']
-                    y4 = graph.nodes[outer_poly_boundary[1]]['y']
-                    y5 = graph.nodes[outer_poly_boundary[0]]['y']
-                    line1 = LineString([[x1, y1], [x2, y2]])
-                    line2 = LineString([[x3, y3], [x4, y4]])
-                    line3 = LineString([[x4, y4], [x5, y5]])
-                    if line1.intersects(line3):
-                        x0 = line1.intersection(line3).x
-                        y0 = line1.intersection(line3).y
-                        coords = [(x1, y1), (x0, y0), (x5, y5)]
-                        poly1 = Polygon(LinearRing(coords))
-                        coords = [(x0, y0), (x2, y2), (x3, y3), (x4, y4)]
-                        poly2 = Polygon(LinearRing(coords))
-                    else:
-                        coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x5, y5), (x1, y1)]
-                    width_2 = compute_distance(x3, x4, y3, y4) + compute_distance(x4, x5, y4, y5)
-                    length_1 = compute_distance(x1, x5, y1, y5)
-                    length_2 = compute_distance(x2, x3, y2, y3)              
-                if len(outer_poly_boundary) == 4: # 4 nodes on the outer boundary
-                    x3 = graph.nodes[outer_poly_boundary[3]]['x']
-                    x4 = graph.nodes[outer_poly_boundary[2]]['x']
-                    x5 = graph.nodes[outer_poly_boundary[1]]['x']
-                    x6 = graph.nodes[outer_poly_boundary[0]]['x']
-                    y3 = graph.nodes[outer_poly_boundary[3]]['y']
-                    y4 = graph.nodes[outer_poly_boundary[2]]['y']
-                    y5 = graph.nodes[outer_poly_boundary[1]]['y']
-                    y6 = graph.nodes[outer_poly_boundary[0]]['y']
-                    coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x5, y5), (x6, y6), (x1, y1)]
-                    width_2 = compute_distance(x3, x4, y3, y4) + compute_distance(x4, x5, y4, y5) + compute_distance(x5, x6, y5, y6)
-                    length_1 = compute_distance(x1, x6, y1, y6)
-                    length_2 = compute_distance(x2, x3, y2, y3)
-                if len(outer_poly_boundary) == 5: # 5 nodes on the outer boundary
-                    x3 = graph.nodes[outer_poly_boundary[4]]['x']
-                    x4 = graph.nodes[outer_poly_boundary[3]]['x']
-                    x5 = graph.nodes[outer_poly_boundary[2]]['x']
-                    x6 = graph.nodes[outer_poly_boundary[1]]['x']
-                    x7 = graph.nodes[outer_poly_boundary[0]]['x']
-                    y3 = graph.nodes[outer_poly_boundary[4]]['y']
-                    y4 = graph.nodes[outer_poly_boundary[3]]['y']
-                    y5 = graph.nodes[outer_poly_boundary[2]]['y']
-                    y6 = graph.nodes[outer_poly_boundary[1]]['y']
-                    y7 = graph.nodes[outer_poly_boundary[0]]['y']
-                    coords = [(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x5, y5), (x6, y6), (x7, y7), (x1, y1)]
-                    width_2 = compute_distance(x3, x4, y3, y4) + compute_distance(x4, x5, y4, y5) + compute_distance(x5, x6, y5, y6) + compute_distance(x6, x7, y6, y7)
-                    length_1 = compute_distance(x1, x7, y1, y7)
-                    length_2 = compute_distance(x2, x3, y2, y3)
+                    coords = [(x1, y1), (x2, y2)] + outer_xy + [(x1, y1)]
+                    if len(outer_nodes) in (2, 3):
+                        # for a 2- or 3-node outer boundary, split into two
+                        # triangles when the near edge (node_1-node_2) crosses
+                        # the outer-boundary segment closest to node_4:
+                        (xs, ys), (xe, ye) = outer_xy[-2], outer_xy[-1]
+                        line1 = LineString([[x1, y1], [x2, y2]])
+                        line_near_4 = LineString([[xs, ys], [xe, ye]])
+                        if line1.intersects(line_near_4):
+                            x0 = line1.intersection(line_near_4).x
+                            y0 = line1.intersection(line_near_4).y
+                            poly1 = Polygon(LinearRing([(x1, y1), (x0, y0), (x4, y4)]))
+                            poly2 = Polygon(LinearRing([(x0, y0), (x2, y2)] + outer_xy[:-1]))
                 if len(coords) > 0:
                     if not poly1:
                         poly = Polygon(LinearRing(coords))
