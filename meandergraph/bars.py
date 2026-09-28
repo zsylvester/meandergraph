@@ -8,6 +8,7 @@ import numpy as np
 import networkx as nx
 from tqdm import trange, tqdm
 import matplotlib.pyplot as plt
+from shapely import STRtree
 from shapely.geometry import Polygon, MultiPolygon, LineString, JOIN_STYLE
 from shapely.ops import unary_union
 from shapely.errors import GEOSException
@@ -431,14 +432,21 @@ class Bar:
         for i in range(len(source_nodes) - 1):
             path1 = find_longitudinal_path(bar_graph, source_nodes[i])
             path2 = find_longitudinal_path(bar_graph, source_nodes[i+1])
+            # two polygons can only satisfy the 'FF2F11212' relate() check
+            # (touching along their boundaries only, no interior overlap) if
+            # their bounding boxes also intersect, so an STRtree bbox query
+            # prunes the O(len(path1) * len(path2)) relate() calls down to
+            # just the candidate pairs, without changing which edges get added
+            path2_polys = [bar_graph.nodes[node2]['poly'] for node2 in path2]
+            path2_polys = [p if p.is_valid else fix_geometry(p) for p in path2_polys]
+            path2_tree = STRtree(path2_polys)
             for node1 in path1:
-                for node2 in path2:
-                    poly1 = bar_graph.nodes[node1]['poly']
-                    poly2 = bar_graph.nodes[node2]['poly']
-                    if not poly1.is_valid:
-                        poly1 = fix_geometry(poly1)
-                    if not poly2.is_valid:
-                        poly2 = fix_geometry(poly2)
+                poly1 = bar_graph.nodes[node1]['poly']
+                if not poly1.is_valid:
+                    poly1 = fix_geometry(poly1)
+                for idx in path2_tree.query(poly1):
+                    node2 = path2[idx]
+                    poly2 = path2_polys[idx]
                     try:
                         if poly1.relate(poly2) == 'FF2F11212':
                             bar_radial_graph.add_edge(node1, node2, edge_type = 'radial')
