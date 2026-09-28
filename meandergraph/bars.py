@@ -3,6 +3,7 @@
 scrolls) objects, and the functions that build them from a pair of
 bankline graphs.
 """
+import logging
 import random
 from dataclasses import dataclass
 from typing import List, Optional, Union
@@ -27,6 +28,8 @@ __all__ = [
     "polygon_width_and_length", "add_polygon_width_and_length",
     "Bar", "Scroll",
 ]
+
+logger = logging.getLogger(__name__)
 
 def merge_polygons(graph, nodes, sparse_inds, polys):
     """
@@ -523,7 +526,7 @@ class Bar:
                             bar_radial_graph.nodes[node2]['x'] = poly2.centroid.x
                             bar_radial_graph.nodes[node2]['y'] = poly2.centroid.y
                     except GEOSException:
-                        pass
+                        logger.warning("relate() failed for polygon-graph nodes %s, %s", node1, node2)
         self.bar_graph = bar_graph
         self.bar_radial_graph = bar_radial_graph
     def plot_polygons(self, ax, plot_graphs):
