@@ -377,7 +377,7 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, smoothing_fa
         try:
             add_timesteps_to_line_graph(graph, timesteps)
         except:
-            print('Error: timesteps should be a list of datetime objects (YYYYMMDD)')
+            logger.error("timesteps should be a list of datetime objects (YYYYMMDD)")
     else:
         add_timesteps_to_line_graph(graph, np.ones(len(X)))
     return graph
