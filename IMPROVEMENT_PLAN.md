@@ -89,8 +89,8 @@ untracked but clutter every `git status`.
 
 ## Phase 3 — Modernization (make it run on the new env)
 
-1. **matplotlib**: replace `mpl.cm.get_cmap('viridis')` (lines 937, 1123; removed
-   in mpl 3.9) with `plt.get_cmap(...)` or `mpl.colormaps[...]`.
+1. **matplotlib — DONE**: `plot_bars_from_centerline` and `plot_bars_from_banks`
+    now use `mpl.colormaps[...]` instead of the removed `mpl.cm.get_cmap(...)`.
 2. **shapely 2**: audit every multi-geometry iteration (`for b in bar:`chunks,
    `for l in line:` in `plot_bar_lines`) → `.geoms`; use
    `shapely.make_valid`/`shapely.validation` instead of the `buffer(0)` idiom where

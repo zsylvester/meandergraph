@@ -104,8 +104,6 @@ local Phase 0–2 work in Sep 2026. `plot_migration_rate_map` no longer takes
 The code was written around 2021–2023 against **shapely 1.8, networkx 2.x,
 matplotlib < 3.9** and has not been updated since:
 
-- `mpl.cm.get_cmap` (used in `plot_bars_from_centerline`, `plot_bars_from_banks`)
-  was removed in matplotlib 3.9 — still unfixed (Phase 3).
 - `nx.write_gpickle`/`read_gpickle` (used in notebooks) were removed in networkx 3.0
   — still unfixed (Phase 3).
 - `plot_bar_lines` still iterates a MultiLineString with `for l in line:`
@@ -122,7 +120,8 @@ Other conventions to keep in mind:
 
 - Many functions both compute *and* plot (names starting with `plot_` often return
   the computed objects and are called for their return values).
-- `restrict_and_correlate_lines` mutates its `X`, `Y` list arguments in place.
+- `restrict_and_correlate_lines` returns restricted copies and does not mutate its `X`, `Y` list
+   arguments.
 - Node attributes: `x`, `y`, `age`, `curv`; graph-level attributes:
   `number_of_centerlines`, `x`, `y` (arrays over all nodes, indexed by node id),
   `start_nodes`, `cutoff_nodes`.
