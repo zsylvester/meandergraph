@@ -4,10 +4,19 @@ Written 2026-08-31, after a full read of the codebase. Phases are ordered so tha
 each one leaves the repo in a working state; bug references use current line numbers
 in `meandergraph/meandergraph.py`.
 
-> **Status (2026-08-31):** Phases 0 and 2 are DONE (bug fixes verified with a
-> synthetic smoke test of the non-plotting pipeline in the `meandergraph` env;
-> notebook updates from item 2.8 deferred to Phase 5 as planned). Phase 1 items
-> 2–4 and Phases 3–5 remain.
+> **Status (2026-09-29):** Phases 0 and 2 are DONE. Phase 1 is partly done
+> (environment, geopandas in `environment.yml`, pytest scaffolding; packaging via
+> `pyproject.toml` remains). Phase 3 is mostly done (library code is updated; dropping
+> librosa (3.5), the end-to-end notebook run (3.6), and the leftover networkx/
+> geopandas calls in the non-simple notebooks remain). Phase 4 is done except the `io` module, the 3D
+> module cleanup, and the parallel `x`/`y` arrays. Phase 5 is only partly done
+> (simple example notebook updated; README/CI/other notebooks remain). The old
+> line numbers below refer to the original single-file `meandergraph.py` and are
+> kept for history; the code now lives in the `meandergraph/` package.
+>
+> The refactor was checked against the original module by running both on the
+> synthetic banklines and on all 32 Mamore years: outputs are identical except that
+> `create_polygon_graph` now builds one extra polygon per bank on Mamore (see 4.3).
 
 ## Phase 0 — Repo hygiene (cheap, do first) — DONE
 
@@ -32,16 +41,18 @@ untracked but clutter every `git status`.
    networkx 3.6, matplotlib 3.11, numpy 2.4, librosa 0.11, geopandas 1.1). The
    module imports cleanly there, but parts of it fail at *runtime* with these
    versions — that's what Phases 2–3 fix. Never install into `base`.
-2. Fix `meandergraph/environment.yml`: add `geopandas`; note that `mayavi` is
-   needed only for `meandergraph_3D.py` (consider making 3D an optional extra —
-   mayavi is a heavy, fragile install).
+2. **PARTLY DONE** — Fix `meandergraph/environment.yml`: `geopandas` is added.
+   Still to do: note that `mayavi` is needed only for `meandergraph_3D.py`
+   (consider making 3D an optional extra — mayavi is a heavy, fragile install), and
+   add `pytest`.
 3. Add a `pyproject.toml` so the package is `pip install -e .`-able and the
    notebooks stop depending on the working directory ("coming soon to pip" in the
    README). Suggested layout:
    `src/meandergraph/{__init__.py, correlation.py, graph.py, polygons.py, bars.py, plot.py, io.py}`
-   (Phase 4 does the actual splitting; packaging can come first with the single file.)
-4. Add `pytest` scaffolding + a tiny synthetic test dataset (e.g., 5 short
-   sine-wave centerlines) so correlation → graph → polygons can be tested in seconds.
+   (The Phase 4 split is done, minus `io.py`; `pyproject.toml` is still to do.)
+4. **DONE** — `pytest` scaffolding + a synthetic test dataset:
+   `tests/test_pipeline_smoke.py` runs correlation → graph → bars → polygons →
+   plotting on synthetic banklines in seconds.
 
 ## Phase 2 — Bug fixes (all verified against the current code) — DONE
 
@@ -79,7 +90,8 @@ untracked but clutter every `git status`.
    extra `cutoffs` argument and `plot_age_map` with a `W=` kwarg that no longer
    exists. Update the notebooks (Phase 5) or restore compatible signatures.
 9. **Bare `except:` clauses** (lines 729, 1833, and in `Bar.add_polygon_graphs`
-   1949–1952, 1985–1993) — swallow real errors (including KeyboardInterrupt);
+   1949–1952, 1985–1993; two bare `except:` clauses are still left in
+   `graph.py`) — swallow real errors (including KeyboardInterrupt);
    narrow to the expected shapely/networkx exceptions.
 10. Minor: duplicate `from shapely.ops import unary_union` import (lines 12/15);
     `find_radial_path_2` is a copy of `find_radial_path` without ages — merge;
@@ -87,43 +99,50 @@ untracked but clutter every `git status`.
     `restrict_and_correlate_lines` mutates its `X`, `Y` arguments in place —
     return new lists instead.
 
-## Phase 3 — Modernization (make it run on the new env)
+## Phase 3 — Modernization (make it run on the new env) — MOSTLY DONE
 
 1. **matplotlib — DONE**: `plot_bars_from_centerline` and `plot_bars_from_banks`
     now use `mpl.colormaps[...]` instead of the removed `mpl.cm.get_cmap(...)`.
-2. **shapely 2**: audit every multi-geometry iteration (`for b in bar:`chunks,
+2. **shapely 2 — DONE**: audit every multi-geometry iteration (`for b in bar:`chunks,
    `for l in line:` in `plot_bar_lines`) → `.geoms`; use
    `shapely.make_valid`/`shapely.validation` instead of the `buffer(0)` idiom where
    possible (keep `fix_geometry` as the single place this happens).
-3. **networkx 3**: notebooks use `nx.write_gpickle`/`read_gpickle` (removed) —
+3. **networkx 3 — DONE** (simple example and `meandergraph_example.ipynb`; the
+   other notebooks were not all updated, see Phase 5): notebooks used `nx.write_gpickle`/`read_gpickle` (removed) —
    switch to the `pickle` module directly, and consider a versioned save format.
-4. **geopandas**: `gdf.crs = {'init': 'epsg:32620'}` → `gdf.set_crs(32620)`.
+4. **geopandas — DONE in the simple example** (`meandergraph_Mamore_banks_example.ipynb`
+   still uses the old form): `gdf.crs = {'init': 'epsg:32620'}` → `gdf.set_crs(32620)`.
 5. **Drop librosa**: it's imported solely for `dtw`. Options: vendor a small DTW
    implementation (it's ~40 lines with numba or plain numpy), or use `dtaidistance`.
    This removes the heaviest dependency (audio stack, numba, soundfile).
 6. Run the full Mamore simple example end-to-end in the new env as the acceptance
    test for this phase.
 
-## Phase 4 — Refactor (structure, not behavior)
+## Phase 4 — Refactor (structure, not behavior) — MOSTLY DONE
 
-1. **Split the 2100-line module** into focused submodules (see Phase 1.3):
+1. **DONE** (no `io` module was created) — **Split the 2100-line module** into focused submodules (see Phase 1.3):
    correlation (DTW, resampling, curvature), graph building, polygon graphs,
    bars/scrolls, plotting, io. Keep `import meandergraph as mg` working via
    `__init__.py` re-exports so old notebooks only need minimal changes.
-2. **Separate computation from plotting.** `plot_bars_from_banks`,
+2. **DONE** for the three named functions — **Separate computation from plotting.** `plot_bars_from_banks`,
    `create_scrolls_and_find_connected_scrolls` (which creates its own figures as a
    side effect), and `Bar.create_merged_polygons` all mix the two. Compute functions
    should return data; thin `plot_*` wrappers take an `ax`.
-3. **Kill the copy-paste ladders**:
+3. **Kill the copy-paste ladders** (`create_polygon_graph` and the successor
+   helpers are DONE; the 3D module is not):
    - `create_polygon_graph` lines 738–806 handle outer boundaries of 2/3/4/5 nodes
      as four near-identical blocks (and silently skip >5). Replace with one loop
      over `outer_poly_boundary` of any length — this also fixes bug 6.
+     **DONE.** Behaviour note: the old code silently produced no polygon for
+     outer boundaries of 6+ nodes; those polygons are now built. On the full
+     Mamore data this adds one polygon per bank (node 2936 on the right bank,
+     3463 on the left, both age 22); all other polygons are unchanged.
    - `meandergraph_3D.plot_meander_graph_in_3D` has the same disease (4/5/6-point
      polygons as separate blocks); triangulate generically.
    - The repeated "find the radial/channel successor of a node" 4-liner appears
      ~10×; extract `radial_successor(graph, node)` / `channel_successor(graph, node)`
-     helpers.
-4. **Performance**:
+     helpers. **DONE.**
+4. **Performance — DONE** (all three items):
    - `create_graph_from_channel_lines` line 462 matches nodes by float equality on
      coordinates with `np.where((x == ...) & (y == ...))` — O(N) per node, O(N²)
      total, and fragile. Keep a dict from (cl_number, point index) → node id built
@@ -132,17 +151,21 @@ untracked but clutter every `git status`.
      with `relate()` (O(n²) shapely calls); use `shapely.STRtree` to prune.
    - `create_scrolls_and_find_connected_scrolls` has a 4-deep loop over
      bars×scrolls×scrolls×10; STRtree again.
-5. **Data model**: make `Bar` and `Scroll` dataclasses; document node/edge/graph
-   attributes in one place; consider an explicit `age`-indexed structure instead of
+5. **Data model — PARTLY DONE** (`Bar` and `Scroll` are now dataclasses with
+   documented attributes; the parallel-array item is open): make `Bar` and `Scroll`
+   dataclasses; document node/edge/graph attributes in one place; consider an explicit `age`-indexed structure instead of
    the parallel `graph.graph['x']`/`['y']` arrays that must stay in sync with node
    ids (a recurring source of subtle coupling — `remove_high_density_nodes` removes
    nodes but the global arrays keep stale entries and indices).
-6. Type hints + numpydoc docstrings on the public API; `logging`/`tqdm` instead of
-   bare `print`.
+6. **MOSTLY DONE** — Type hints + numpydoc docstrings on the public API;
+   `logging`/`tqdm` instead of bare `print`. (Type hints added and diagnostics moved
+   to `logging`; a few progress `print()` calls remain in `graph.py`.)
 
-## Phase 5 — Notebooks, docs, CI
+## Phase 5 — Notebooks, docs, CI — PARTLY DONE
 
-1. Make `meandergraph_Mamore_banks_simple_example.ipynb` the single canonical
+1. **PARTLY DONE** — the simple example and `meandergraph_example.ipynb` now use
+   the current API and the package imports; the interactive `plt.ginput` cell and
+   the other notebooks are unchanged. Make `meandergraph_Mamore_banks_simple_example.ipynb` the single canonical
    bankline example, updated to the refactored API and executed top-to-bottom in the
    new env (replace the interactive `plt.ginput` cell with hardcoded points, keep
    `%matplotlib qt` optional). Update or clearly mark the other notebooks as
