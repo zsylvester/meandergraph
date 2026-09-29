@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+
+# OS / editors
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# archived paper figures, movies, design files (kept locally, not in git)
+archive/
+
+# analysis outputs and local data caches
+meandergraph/cache/
+meandergraph/jurua_results/
+*.gpickle
+*.hdf5
+*.npz
+mamore_right_bank.*
+temp*
+
+# generated animations
+*.gif
+*.mp4
+*.mov
+*.wrl

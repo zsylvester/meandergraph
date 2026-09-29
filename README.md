@@ -1,6 +1,6 @@
 # meandergraph
 
-<img src="https://github.com/zsylvester/meandergraph/blob/main/meander_graph_1.svg" width="800">
+<img src="docs/images/meander_graph_1.svg" width="800">
 
 ## Description
 
@@ -27,7 +27,7 @@ This is *work in progress*.
 
 ## Getting started
 
-See the [meandergraph_Mamore_banks_simple_example.ipynb](https://github.com/zsylvester/meandergraph/blob/main/meandergraph/meandergraph_Mamore_banks_simple_example.ipynb) notebook for an example of how the displacement of the banks of the Mamore River in Bolivia can be analyzed using meandergraph. The shapefiles are available in the 'data' folder.
+See the [meandergraph_Mamore_banks_simple_example.ipynb](examples/meandergraph_Mamore_banks_simple_example.ipynb) notebook for an example of how the displacement of the banks of the Mamore River in Bolivia can be analyzed using meandergraph. The shapefiles are available in the 'data' folder.
 
 ## License
 
