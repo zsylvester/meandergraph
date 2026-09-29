@@ -4,13 +4,13 @@ End-to-end smoke test of the bankline workflow (correlation -> line graphs
 banklines, so the pipeline can be exercised in seconds without the real
 Mamore shapefiles.
 
-This is a regression harness for the Phase 3 (modernization) and Phase 4
-(refactor) work in IMPROVEMENT_PLAN.md: it pins down structural properties
-of the pipeline's output (node/edge counts, bar/scroll counts, total areas)
-so that changes intended to be behavior-preserving can be checked quickly.
-It is deliberately not a byte-for-byte regression test, since swapping the
-DTW implementation (Phase 3.5) and fixing shapely-2 compatibility (Phase
-3.2) are both expected to perturb exact floating point results slightly.
+This is a regression harness for the modernization and refactor work in
+IMPROVEMENT_PLAN.md: it pins down structural properties of the pipeline's
+output (node/edge counts, bar/scroll counts, total areas) so that changes
+intended to be behavior-preserving can be checked quickly. It is
+deliberately not a byte-for-byte regression test, since the shapely-2
+compatibility fixes are expected to perturb exact floating point results
+slightly in some cases.
 """
 import matplotlib
 
@@ -52,8 +52,8 @@ def bank_lines():
 @pytest.fixture(scope="module")
 def line_graphs(bank_lines):
     X1, Y1, X2, Y2 = bank_lines
-    P1, Q1 = mg.correlate_set_of_curves(X1, Y1)
-    P2, Q2 = mg.correlate_set_of_curves(X2, Y2)
+    P1, Q1, costs1 = mg.correlate_set_of_curves(X1, Y1)
+    P2, Q2, costs2 = mg.correlate_set_of_curves(X2, Y2)
     graph1 = mg.create_graph_from_channel_lines(X1, Y1, P1, Q1, n_points=5, max_dist=50)
     graph2 = mg.create_graph_from_channel_lines(X2, Y2, P2, Q2, n_points=5, max_dist=50)
     graph1 = mg.remove_high_density_nodes(graph1, min_dist=2, max_dist=50)
@@ -63,9 +63,10 @@ def line_graphs(bank_lines):
 
 def test_correlate_set_of_curves_shapes(bank_lines):
     X1, Y1, _, _ = bank_lines
-    P1, Q1 = mg.correlate_set_of_curves(X1, Y1)
+    P1, Q1, costs1 = mg.correlate_set_of_curves(X1, Y1)
     assert len(P1) == len(X1) - 1
     assert len(Q1) == len(X1) - 1
+    assert len(costs1) == len(X1) - 1
     for p, q in zip(P1, Q1):
         assert len(p) == len(q)
         assert p.min() >= 0
