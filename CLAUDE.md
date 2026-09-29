@@ -35,15 +35,29 @@ bars.
 
 ## Layout
 
-- [meandergraph/meandergraph.py](meandergraph/meandergraph.py) — the entire core
-  library (~2100 lines, imported as `mg`). Not installed as a package; notebooks
-  import it from the same directory.
+- [meandergraph/](meandergraph/) — the core library, a package imported as `mg`
+  (`import meandergraph as mg`). Not pip-installed; notebooks put the repo root on
+  `sys.path` (`sys.path.append('../')`). [`__init__.py`](meandergraph/__init__.py)
+  re-exports every public name of the submodules, so `mg.<function>` works without
+  naming a submodule. Each submodule lists its public names in `__all__`; a new
+  public function must be added there or it will not be reachable as `mg.<name>`.
+  - `geometry.py` — `fix_geometry` (the single place invalid shapely geometries are
+    repaired), `compute_distance`, `directionOfPoint`, `ensure_multipolygon`.
+  - `correlation.py` — DTW correlation (`correlate_curves`,
+    `correlate_set_of_curves`), resampling, curvature, timesteps, `find_indices`,
+    `restrict_and_correlate_lines`.
+  - `graph.py` — the line graph (channel + radial edges), path finding, node
+    thinning, edge directions, `radial_successor` / `channel_successor` helpers.
+  - `polygons.py` — polygon graphs (`create_polygon_graph`,
+    `create_simple_polygon_graph`), channel polygons, one-step differences.
+  - `bars.py` — `Scroll` / `Bar` dataclasses and the bar-building pipeline.
+  - `plot.py` — the `plot_*` functions.
 - [meandergraph/meandergraph_3D.py](meandergraph/meandergraph_3D.py) — 3D
   visualization of the graphs/polygons as stratigraphy, using **mayavi** (not in
   `environment.yml`).
 - `archive/` (gitignored) — old paper figures, animations, design files, abstracts,
   and `mg_temp.py` (an older snapshot of the module; its `polygon_width_and_length`
-  has been merged into `meandergraph.py`). Do not develop here.
+  has been merged into `meandergraph/bars.py`). Do not develop here.
 - Notebooks in `examples/` (upstream layout since PR #3):
   - `meandergraph_Mamore_banks_simple_example.ipynb` — the canonical bankline
     workflow (referenced by the README).
@@ -52,14 +66,16 @@ bars.
   - `meandergraph_example.ipynb`, `Meandergraph_large_model.ipynb`,
     `Meandergraph_read_model.ipynb` — centerline/simulation-based examples (use
     meanderpy output HDF5 files in the repo root).
-  - Note: several notebook cells are stale relative to current function signatures
-    (see Pitfalls).
+  - Note: only the simple example and `meandergraph_example.ipynb` have been
+    updated to the current API; the others still have stale cells (see Pitfalls).
 - `data/` — Mamore bankline shapefiles (`lb_YYYY.*`, `rb_YYYY.*`; 1986–2018, with
   2002 and 2012 missing).
 - Repo root — data files used/produced by the notebooks (`.hdf5`, `.npz`,
   `.gpickle`, `mamore_right_bank.*`; all gitignored) plus `docs/images/` for the
-  README figure. There is still no `setup.py`/`pyproject.toml` and no test suite
-  (Phase 1 of the improvement plan).
+  README figure. There is still no `setup.py`/`pyproject.toml`.
+- `tests/` — a synthetic-data smoke test of the bankline pipeline
+  (`tests/test_pipeline_smoke.py`; run `python -m pytest tests`). It checks
+  structural properties (counts, well-formedness), not exact values.
 
 ## Typical bankline workflow (what the code is for)
 
@@ -84,8 +100,8 @@ bars.
 - `conda` is at `/Users/zoltan/miniforge3/bin/conda` (may not be on PATH in
   non-interactive shells).
 - [meandergraph/environment.yml](meandergraph/environment.yml) is incomplete: it is
-  missing `geopandas` (needed by all bankline notebooks) and `mayavi` (needed only by
-  `meandergraph_3D.py`).
+  missing `mayavi` (needed only by `meandergraph_3D.py`) and `pytest` (needed to run
+  `tests/`).
 - `librosa` is used *only* for its `dtw` function.
 
 ## Collaboration
@@ -101,20 +117,20 @@ local Phase 0–2 work in Sep 2026. `plot_migration_rate_map` no longer takes
 
 ## Pitfalls / current state (as of 2026-09)
 
-The code was written around 2021–2023 against **shapely 1.8, networkx 2.x,
-matplotlib < 3.9** and has not been updated since:
+The code was written around 2021–2023 against shapely 1.8, networkx 2.x and
+matplotlib < 3.9 and has since been updated for shapely 2, networkx 3 and
+matplotlib 3.9+ (`.geoms` iteration, `mpl.colormaps`, `pickle` instead of
+`nx.write_gpickle`). Remaining rough edges:
 
-- `nx.write_gpickle`/`read_gpickle` (used in notebooks) were removed in networkx 3.0
-  — still unfixed (Phase 3).
-- `plot_bar_lines` still iterates a MultiLineString with `for l in line:`
-  (shapely 2 needs `.geoms`) — Phase 3.
-- Notebook cells unpack `correlate_curves`/`correlate_set_of_curves` into 2 values;
-  the functions now return 3 (`p, q, cost`). Other notebook calls
-  (`create_polygon_graphs_and_bar_graphs`, `plot_age_map`) also use outdated
-  signatures — Phase 5.
-- The Phase 2 bug list in [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md) was fixed in
-  Aug 2026 (verified by a synthetic smoke test of the non-plotting pipeline);
-  Phases 0 and 2 of the plan are done, Phases 1 and 3–5 are not.
+- Notebooks other than the simple example and `meandergraph_example.ipynb` still have
+  stale cells: `meandergraph_Mamore_banks_example.ipynb` and
+  `Meandergraph_large_model.ipynb` unpack `correlate_set_of_curves` into 2 values (it
+  returns 3: `P, Q, costs`), and `meandergraph_Mamore_banks_example.ipynb` also uses
+  `nx.write_gpickle`, `gdf.crs = {'init': ...}` and `plot_age_map(..., W=...)`;
+  `Plot_Mamore_meandergraph_data.ipynb` uses `nx.read_gpickle`.
+- Two bare `except:` clauses remain in `graph.py`.
+- The Phase 0, 2 and most of 3–4 items of [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md)
+  are done; Phase 1 (packaging), dropping librosa, and Phase 5 are not.
 
 Other conventions to keep in mind:
 
@@ -122,7 +138,22 @@ Other conventions to keep in mind:
   the computed objects and are called for their return values).
 - `restrict_and_correlate_lines` returns restricted copies and does not mutate its `X`, `Y` list
    arguments.
-- Node attributes: `x`, `y`, `age`, `curv`; graph-level attributes:
+- Compute steps are separated from plotting where it matters: `plot_bars_from_banks`
+  / `plot_bars_from_centerline`, `create_scrolls_and_find_connected_scrolls` and
+  `Bar.create_merged_polygons` are thin wrappers over `compute_bars_from_banks`,
+  `compute_bars_from_centerline`, `compute_scrolls_and_connections` and
+  `Bar.compute_merged_polygons`. Use the `compute_*` versions to avoid creating figures.
+- `Bar` and `Scroll` are dataclasses; optional attributes such as `merged_polygons`
+  and `bank_type` exist from construction and are `None` until set.
+- `create_polygon_graph` builds each polygon from `node_1`, `node_2` and the path
+  along the next line between their radial successors (the "outer boundary"); any
+  outer-boundary length >= 2 nodes yields a polygon (earlier versions silently
+  skipped lengths other than 2-5, so results can contain a few more polygons than
+  older outputs).
+- `create_graph_from_channel_lines` resolves centerline points to nodes with a
+  `(centerline index, point index) -> node id` dict; where DTW maps several
+  trajectories to the same point, the first node created wins.
+- Node attributes: `x`, `y`, `age`, `curv` (`timestep` when timesteps are given); graph-level attributes:
   `number_of_centerlines`, `x`, `y` (arrays over all nodes, indexed by node id),
   `start_nodes`, `cutoff_nodes`.
 - Long-running loops use `tqdm`/`trange`; building graphs for ~30 banklines takes
