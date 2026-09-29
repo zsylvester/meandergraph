@@ -392,7 +392,7 @@ def create_list_of_start_nodes(graph):
             start_nodes.append(node)
     return start_nodes
 
-def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, smoothing_factor = 51, remove_cutoff_edges = False, clean_up_centerlines = True, timesteps = None):
+def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, smoothing_factor = 51, remove_cutoff_edges = False, timesteps = None, clean_up_centerlines = True):
     """
     Create directed graph from a set of cghannel center- or bank lines.
 
@@ -417,6 +417,8 @@ def create_graph_from_channel_lines(X, Y, P, Q, n_points, max_dist, smoothing_fa
     timesteps: list (Optional, Default = None)
         List containing floating point numbers representing the amount of time (years) between successive longitudinal paths.
         If None the timestep defaults to 1.0.
+    clean_up_centerlines: Boolean (Optional, Default = True)
+        Parameter that is used to remove nodes that are not properly connected along the centerlines
     Returns
     -------
     graph : directed graph
