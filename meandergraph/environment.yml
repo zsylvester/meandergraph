@@ -16,6 +16,7 @@ dependencies:
   - tqdm
   - networkx
   - shapely
+  - geopandas
   - h5py
   - pip
   - pip:
