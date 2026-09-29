@@ -126,7 +126,11 @@ def create_polygon_graph(graph: nx.DiGraph) -> nx.DiGraph:
                             x0 = line1.intersection(line_near_4).x
                             y0 = line1.intersection(line_near_4).y
                             poly1 = Polygon(LinearRing([(x1, y1), (x0, y0), (x4, y4)]))
-                            poly2 = Polygon(LinearRing([(x0, y0), (x2, y2)] + outer_xy[:-1]))
+                            if len(outer_nodes) == 2:
+                                # keep the original vertex order (x0, x3, x2) for this case
+                                poly2 = Polygon(LinearRing([(x0, y0), (x3, y3), (x2, y2)]))
+                            else:
+                                poly2 = Polygon(LinearRing([(x0, y0), (x2, y2)] + outer_xy[:-1]))
                 if len(coords) > 0:
                     if not poly1:
                         poly = Polygon(LinearRing(coords))
