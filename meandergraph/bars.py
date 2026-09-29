@@ -396,7 +396,7 @@ def add_polygon_width_and_length(wbars: List["Bar"], graph1: nx.DiGraph, graph2:
             wbar.bar_graph.nodes[node]['length'] = length
 
 
-@dataclass
+@dataclass(eq=False)
 class Bar:
     """
     A connected set of 'scroll' polygons (one-timestep depositional areas)
@@ -626,7 +626,7 @@ class Bar:
             self.bank_type = 'left'
 
 
-@dataclass
+@dataclass(eq=False)
 class Scroll:
     """
     A single 'scroll': the depositional polygon created by one timestep of

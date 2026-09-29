@@ -117,9 +117,12 @@ def compute_bars_from_centerline(graph: nx.DiGraph, cutoff_area: float, W: float
         jump = fix_geometry(jump)
         chs.append(ch1)
         jumps.append(jump)
-        for cf in cutoff:
-            if type(cf) == MultiPolygon:
-                cutoff.remove(cf)
+        cutoff = [
+            part
+            for geom in cutoff
+            for part in (geom.geoms if type(geom) == MultiPolygon else (geom,))
+            if type(part) == Polygon
+        ]
         cutoffs.append(cutoff)
     chs.append(ch2) # append last channel
     # creating list of merged channels
@@ -235,9 +238,12 @@ def compute_bars_from_banks(graph1: nx.DiGraph, graph2: nx.DiGraph, cutoff_area:
         ch1, bar, erosion, jump, cutoff = one_step_difference_no_plot(ch1, ch2, cutoff_area)
         chs.append(ch1)
         jumps.append(jump)
-        for cf in cutoff:
-            if type(cf) == MultiPolygon:
-                cutoff.remove(cf)
+        cutoff = [
+            part
+            for geom in cutoff
+            for part in (geom.geoms if type(geom) == MultiPolygon else (geom,))
+            if type(part) == Polygon
+        ]
         cutoffs.append(cutoff)
     chs.append(ch2) # append last channel
     # creating list of merged channels

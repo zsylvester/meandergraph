@@ -137,3 +137,55 @@ def test_bar_graphs_and_plotting(line_graphs):
     for plot_type, vmin, vmax in [("migration", -5, 5), ("curvature", -1, 1), ("age", 0, 5)]:
         mg.plot_bar_graphs(graph1, graph2, wbars, cutoffs, X1, Y1, X2, Y2, W=30, vmin=vmin, vmax=vmax, plot_type=plot_type, ax=ax)
     plt.close(fig)
+
+
+def test_bar_and_scroll_are_identity_hashable():
+    """Bar/Scroll compare and hash by identity (as the original plain classes did),
+    so they can be set members / dict keys / NetworkX nodes, and the Bar <-> Scroll
+    reference cycle cannot make comparison recurse."""
+    from shapely.geometry import Polygon
+
+    poly = Polygon([(0, 0), (1, 0), (1, 1)])
+
+    def make():
+        bar = mg.Bar(0, [])
+        scroll = mg.Scroll(0, 0, "left", poly, bar, [])
+        bar.scrolls = [scroll]
+        return bar, scroll
+
+    (b1, s1), (b2, s2) = make(), make()
+    assert len({b1, b2, s1, s2}) == 4
+    assert b1 != b2 and b1 == b1
+    assert b2 not in [b1]
+    graph = nx.Graph()
+    graph.add_edge(b1, b2)
+    assert graph.number_of_nodes() == 2
+
+
+def test_compute_bars_from_banks_returns_flat_polygon_cutoffs(bank_lines, monkeypatch):
+    """Cutoff lists returned by the compute_* functions contain only Polygons, even
+    when the underlying difference step yields adjacent MultiPolygons."""
+    import meandergraph.plot as plot_module
+    from shapely.geometry import MultiPolygon, Polygon
+
+    def tri(x):
+        return Polygon([(x, 0), (x + 1, 0), (x + 1, 1)])
+
+    real = plot_module.one_step_difference_no_plot
+
+    def fake(ch1, ch2, cutoff_area):
+        ch1, bar, erosion, jump, _ = real(ch1, ch2, cutoff_area)
+        cutoff = [MultiPolygon([tri(0), tri(3)]), MultiPolygon([tri(10), tri(13)]), tri(20)]
+        return ch1, bar, erosion, jump, cutoff
+
+    monkeypatch.setattr(plot_module, "one_step_difference_no_plot", fake)
+    X1, Y1, X2, Y2 = bank_lines
+    P1, Q1, _ = mg.correlate_set_of_curves(X1, Y1)
+    P2, Q2, _ = mg.correlate_set_of_curves(X2, Y2)
+    g1 = mg.create_graph_from_channel_lines(X1, Y1, P1, Q1, n_points=5, max_dist=50)
+    g2 = mg.create_graph_from_channel_lines(X2, Y2, P2, Q2, n_points=5, max_dist=50)
+    *_, cutoffs = mg.compute_bars_from_banks(g1, g2, cutoff_area=200)
+    assert len(cutoffs) > 0
+    for step_cutoffs in cutoffs:
+        assert len(step_cutoffs) == 5
+        assert all(type(c) == Polygon for c in step_cutoffs)
