@@ -12,7 +12,7 @@ dependencies:
   - jupyterlab
   - scipy
   - scikit-image
-  - librosa
+  - numba
   - tqdm
   - networkx
   - shapely
