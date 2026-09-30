@@ -11,7 +11,7 @@ time. It works with either:
   yearly left/right bank shapefiles for 1986–2018 in `data/`).
 
 Core idea: successive channel lines are correlated point-to-point with dynamic time
-warping (`librosa.sequence.dtw`); the correlated points become nodes of a `nx.DiGraph`
+warping (`meandergraph/dtw.py`); the correlated points become nodes of a `nx.DiGraph`
 with two edge types:
 
 - `'channel'` edges — connect consecutive points *along* one centerline/bankline
@@ -43,9 +43,14 @@ bars.
   public function must be added there or it will not be reachable as `mg.<name>`.
   - `geometry.py` — `fix_geometry` (the single place invalid shapely geometries are
     repaired), `compute_distance`, `directionOfPoint`, `ensure_multipolygon`.
+  - `dtw.py` — the DTW itself, in numba (no librosa): `dtw_exact` (full DTW; paths
+    and costs are identical to `librosa.sequence.dtw`, but ~10x faster and ~14x less
+    memory at 25,000 points) and `dtw_fast` (coarse-to-fine: solves a block-averaged
+    problem, then the full-resolution DTW only in a corridor around it; ~60x faster
+    than `dtw_exact` at 25,000 points but only optimal *within* the corridor).
   - `correlation.py` — DTW correlation (`correlate_curves`,
-    `correlate_set_of_curves`), resampling, curvature, timesteps, `find_indices`,
-    `restrict_and_correlate_lines`.
+    `correlate_set_of_curves`; both take `method='exact'` (default) or `'fast'`),
+    resampling, curvature, timesteps, `find_indices`, `restrict_and_correlate_lines`.
   - `graph.py` — the line graph (channel + radial edges), path finding, node
     thinning, edge directions, `radial_successor` / `channel_successor` helpers.
   - `polygons.py` — polygon graphs (`create_polygon_graph`,
@@ -102,7 +107,11 @@ bars.
 - [meandergraph/environment.yml](meandergraph/environment.yml) is incomplete: it is
   missing `mayavi` (needed only by `meandergraph_3D.py`) and `pytest` (needed to run
   `tests/`).
-- `librosa` is used *only* for its `dtw` function.
+- `numba` is a required dependency (it runs the DTW loops in `meandergraph/dtw.py`);
+  `librosa` is no longer used. The first call to a DTW function compiles (and caches)
+  the kernels, which takes a few seconds.
+- `benchmarks/dtw_benchmark.py` compares librosa / exact / fast / coarse-only DTW on the
+  Mamore banklines (time, peak memory, difference from the exact path).
 
 ## Collaboration
 
@@ -130,7 +139,7 @@ matplotlib 3.9+ (`.geoms` iteration, `mpl.colormaps`, `pickle` instead of
   `Plot_Mamore_meandergraph_data.ipynb` uses `nx.read_gpickle`.
 - Two bare `except:` clauses remain in `graph.py`.
 - The Phase 0, 2 and most of 3–4 items of [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md)
-  are done; Phase 1 (packaging), dropping librosa, and Phase 5 are not.
+  are done, as is dropping librosa; Phase 1 (packaging) and Phase 5 are not.
 
 Other conventions to keep in mind:
 
@@ -153,6 +162,11 @@ Other conventions to keep in mind:
 - `create_graph_from_channel_lines` resolves centerline points to nodes with a
   `(centerline index, point index) -> node id` dict; where DTW maps several
   trajectories to the same point, the first node created wins.
+- `correlate_curves(..., method='fast')` is opt-in: on cutoff-affected pairs it can
+  return a path whose cost is a few percent above the exact one (see
+  [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md), Phase 3.5). Default `'exact'` reproduces
+  the old librosa output exactly. The `band_rad` argument of `correlate_curves` is unused
+  (it never had an effect).
 - Node attributes: `x`, `y`, `age`, `curv` (`timestep` when timesteps are given); graph-level attributes:
   `number_of_centerlines`, `x`, `y` (arrays over all nodes, indexed by node id),
   `start_nodes`, `cutoff_nodes`.

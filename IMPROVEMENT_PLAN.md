@@ -6,8 +6,8 @@ in `meandergraph/meandergraph.py`.
 
 > **Status (2026-09-29):** Phases 0 and 2 are DONE. Phase 1 is partly done
 > (environment, geopandas in `environment.yml`, pytest scaffolding; packaging via
-> `pyproject.toml` remains). Phase 3 is mostly done (library code is updated; dropping
-> librosa (3.5), the end-to-end notebook run (3.6), and the leftover networkx/
+> `pyproject.toml` remains). Phase 3 is mostly done (library code is updated and librosa is
+> replaced by a numba DTW (3.5); the end-to-end notebook run (3.6) and the leftover networkx/
 > geopandas calls in the non-simple notebooks remain). Phase 4 is done except the `io` module, the 3D
 > module cleanup, and the parallel `x`/`y` arrays. Phase 5 is only partly done
 > (simple example notebook updated; README/CI/other notebooks remain). The old
@@ -112,10 +112,48 @@ untracked but clutter every `git status`.
    switch to the `pickle` module directly, and consider a versioned save format.
 4. **geopandas — DONE in the simple example** (`meandergraph_Mamore_banks_example.ipynb`
    still uses the old form): `gdf.crs = {'init': 'epsg:32620'}` → `gdf.set_crs(32620)`.
-5. **Drop librosa**: it's imported solely for `dtw`. Options: vendor a small DTW
-   implementation (it's ~40 lines with numba or plain numpy), or use `dtaidistance`.
-   This removes the heaviest dependency (audio stack, numba, soundfile).
-6. Run the full Mamore simple example end-to-end in the new env as the acceptance
+5. **Drop librosa — DONE** (branch `dtw-replace-librosa`): the DTW now lives in
+   `meandergraph/dtw.py` (numba), and `numba` replaces `librosa` in `environment.yml`.
+   - `dtw_exact` reproduces `librosa.sequence.dtw` path-for-path (same tie-breaking;
+     verified on random and tie-heavy curves and on the full 32-year Mamore pipeline,
+     where every output is identical to the librosa run). It computes distances on
+     the fly and stores one byte per cell.
+   - `dtw_fast` (opt-in, `method='fast'`) is a coarse-to-fine DTW: block-average
+     (factor chosen so the coarse problem has ~1500 points), exact DTW on the coarse
+     curves, then full-resolution DTW inside a corridor (`radius` coarse blocks wide,
+     default 2) around the up-sampled coarse path. The corridor is widened if the
+     path touches its edge. The ChronoLog-style "coarse only" up-sampling was tried
+     and rejected (cost 0.4-2.8% above exact at 25,000 points, only 12-30% of the exact
+     path cells recovered).
+   - `correlate_curves` / `correlate_set_of_curves` / `restrict_and_correlate_lines`
+     take `method='exact'` (default) or `'fast'`. `band_rad` was never effective
+     and remains unused.
+   - Benchmarks (`benchmarks/dtw_benchmark.py`): right-bank Mamore lines for 1986→1987 and     
+     1996→1997, resampled to N points; each timing is the best of 3 runs, averaged
+     over the two year-pairs.
+
+     | points | librosa | `dtw_exact` | `dtw_fast` |
+     |---|---|---|---|
+     | 5,000 | 5.8 s, 0.8 GB | 0.07 s, 0.3 GB | 0.007 s, 0.3 GB |
+     | 15,000 | 25.5 s, 4.7 GB | 0.6 s, 0.5 GB | 0.014 s, 0.3 GB |
+     | 25,000 | 17.0 s, 12.5 GB | 1.8 s, 0.9 GB | 0.03 s, 0.3 GB |
+
+     `dtw_exact` memory grows as N*M bytes; `dtw_fast` memory is O(N * corridor width).
+   - Accuracy of `dtw_fast` against `dtw_exact`, all 30 consecutive year pairs of
+     both banks (60 pairs), whole-river lines resampled to N points, default settings:
+     N=25,000: 57/60 identical; the other three pairs (lb 11, 26, 27) cost 0.0003%,
+     2.2% and 2.5% more, with matched points off by up to 0.9, 5 and 16 km. N=5,000:
+     55/60 identical, worst cost excess 2.1%. Widening the corridor fixes some of
+     these (lb 26 needs radius 32) but not all (lb 27 is still 1.7% off at radius 64),
+     so the failures are not reliably predictable. Coarser settings are worse
+     (downsample 32: 5/60 differ, deviations up to 44 km).
+   - Downstream check on the full Mamore pipeline (32 years, notebook settings,
+     correlation on the raw lines and again on the 2 m-resampled reach): the fast
+     method gives outputs identical to the exact method at every step (correlation
+     paths, line graphs, bars, scrolls, polygon graphs, maps).
+   - Hence `'exact'` stays the default; `'fast'` is for long lines where `'exact'`
+     is too slow or memory-hungry, ideally with a check against `'exact'` on a subset of pairs.
+6.  **DONE** Run the full Mamore simple example end-to-end in the new env as the acceptance
    test for this phase.
 
 ## Phase 4 — Refactor (structure, not behavior) — MOSTLY DONE
@@ -165,10 +203,7 @@ untracked but clutter every `git status`.
 
 1. **PARTLY DONE** — the simple example and `meandergraph_example.ipynb` now use
    the current API and the package imports; the interactive `plt.ginput` cell and
-   the other notebooks are unchanged. Make `meandergraph_Mamore_banks_simple_example.ipynb` the single canonical
-   bankline example, updated to the refactored API and executed top-to-bottom in the
-   new env (replace the interactive `plt.ginput` cell with hardcoded points, keep
-   `%matplotlib qt` optional). Update or clearly mark the other notebooks as
+   the other notebooks are unchanged. Make `meandergraph_Mamore_banks_simple_example.ipynb` the single canonical bankline example, updated to the refactored API and executed top-to-bottom in the new env (replace the interactive `plt.ginput` cell with hardcoded points, keep `%matplotlib qt` optional). Update or clearly mark the other notebooks as
    archival.
 2. README: real install instructions (conda env + `pip install -e .`), a short
    "concepts" section (channel vs. radial edges, scrolls, bars, cutoff parameters
