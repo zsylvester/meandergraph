@@ -16,7 +16,7 @@ This is *work in progress*.
 - scipy
 - pandas
 - geopandas
-- librosa
+- numba
 - networkx
 - shapely
 - tqdm
