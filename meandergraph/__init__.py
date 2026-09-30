@@ -6,6 +6,7 @@ The implementation is split across submodules by concern (see
 IMPROVEMENT_PLAN.md Phase 4.1):
 
 - geometry     -- low-level shapely helpers shared by the rest of the package
+- dtw          -- dynamic time warping (numba; exact and coarse-to-fine)
 - correlation  -- dynamic-time-warping correlation of successive lines
 - graph        -- the line graph (channel + radial edges)
 - polygons     -- polygon graphs built from a line graph
@@ -17,6 +18,7 @@ Everything public is re-exported here, so `import meandergraph as mg` and
 single flat module.
 """
 from .geometry import *
+from .dtw import *
 from .correlation import *
 from .graph import *
 from .polygons import *
