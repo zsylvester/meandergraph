@@ -1,14 +1,14 @@
 """
-Correlate successive center- or banklines with dynamic time warping (via
-librosa.sequence.dtw), and the curve-resampling / curvature / timestep
-helpers built on top of it.
+Correlate successive center- or banklines with dynamic time warping (see
+meandergraph.dtw), and the curve-resampling / curvature / timestep helpers
+built on top of it.
 """
 from typing import List, Optional, Tuple
 
 import numpy as np
 from scipy.spatial import distance, KDTree
 from scipy import interpolate
-from librosa.sequence import dtw
+from .dtw import dtw_exact, dtw_fast
 from tqdm import trange
 
 __all__ = [
@@ -41,7 +41,8 @@ def find_next_index(p: np.ndarray, q: np.ndarray, ind1: int) -> int:
     ind2 = q[p_index] # find the equivalent index in 'q'
     return ind2
 
-def correlate_curves(x1: np.ndarray, x2: np.ndarray, y1: np.ndarray, y2: np.ndarray, band_rad: Optional[float] = None) -> Tuple[np.ndarray, np.ndarray, float]:
+def correlate_curves(x1: np.ndarray, x2: np.ndarray, y1: np.ndarray, y2: np.ndarray, band_rad: Optional[float] = None,
+                     method: str = "exact", **dtw_kwargs) -> Tuple[np.ndarray, np.ndarray, float]:
     """ 
     Use dynamic time warping to correlate two 2D curves.
 
@@ -55,6 +56,17 @@ def correlate_curves(x1: np.ndarray, x2: np.ndarray, y1: np.ndarray, y2: np.ndar
         y-coordinates of first curve.
     y2 : 1D array
         y-coordinates of second curve.
+    band_rad : float, optional
+        Not used. Kept for backward compatibility (it had no effect when the
+        DTW was done by librosa either).
+    method : {'exact', 'fast'}
+        'exact' is the full dynamic time warping (same result as
+        librosa.sequence.dtw); 'fast' is a coarse-to-fine version that is much
+        faster and uses much less memory for long curves, at the price of only
+        being optimal within a corridor around the coarse solution (see
+        meandergraph.dtw.dtw_fast).
+    **dtw_kwargs
+        Extra arguments for method='fast' (`downsample`, `radius`, `max_widenings`).
 
     Returns
     -------
@@ -66,17 +78,15 @@ def correlate_curves(x1: np.ndarray, x2: np.ndarray, y1: np.ndarray, y2: np.ndar
         Total dynamic time warping cost of the correlation.
     """
 
-    X = np.vstack((x1,y1))
-    Y = np.vstack((x2,y2))
-    # sm = distance.cdist(X.T, Y.T) # similarity matrix
-    # D, wp = dtw(C=sm) # dynamic time warping
-    # if band_rad:
-    D, wp = dtw(X, Y, band_rad=band_rad)
-    # else:
-    #     D, wp = dtw(X, Y)
-    p = wp[:,0] # correlation indices for first curve
-    q = wp[:,1] # correlation indices for second curve
-    return p, q, D[-1,-1]
+    if method == 'exact':
+        if dtw_kwargs:
+            raise TypeError("unexpected arguments for method='exact': %s" % ', '.join(dtw_kwargs))
+        p, q, cost = dtw_exact(x1, y1, x2, y2)
+    elif method == 'fast':
+        p, q, cost = dtw_fast(x1, y1, x2, y2, **dtw_kwargs)
+    else:
+        raise ValueError("method must be 'exact' or 'fast', not %r" % (method,))
+    return p, q, cost
 
 # def correlate_curves_fdtw(x1,x2,y1,y2):
 #     X = np.vstack((x1,y1)).T
@@ -86,7 +96,7 @@ def correlate_curves(x1: np.ndarray, x2: np.ndarray, y1: np.ndarray, y2: np.ndar
 #     return path[::-1,0], path[::-1,1], distance
 
 
-def correlate_set_of_curves(X: List[np.ndarray], Y: List[np.ndarray]) -> Tuple[List[np.ndarray], List[np.ndarray], List[float]]:
+def correlate_set_of_curves(X: List[np.ndarray], Y: List[np.ndarray], method: str = "exact", **dtw_kwargs) -> Tuple[List[np.ndarray], List[np.ndarray], List[float]]:
     """
     Correlate a set of curves defined by x and y coordinates stored as two lists X and Y.
 
@@ -96,6 +106,10 @@ def correlate_set_of_curves(X: List[np.ndarray], Y: List[np.ndarray]) -> Tuple[L
         x coordinate arrays.
     Y : list
         y coordinate arrays.
+    method : {'exact', 'fast'}
+        DTW method, see correlate_curves.
+    **dtw_kwargs
+        Extra arguments for method='fast'.
 
     Returns
     -------
@@ -111,7 +125,7 @@ def correlate_set_of_curves(X: List[np.ndarray], Y: List[np.ndarray]) -> Tuple[L
     Q = []
     costs = []
     for i in trange(len(X) - 1):
-        p, q, cost = correlate_curves(X[i], X[i+1], Y[i], Y[i+1])
+        p, q, cost = correlate_curves(X[i], X[i+1], Y[i], Y[i+1], method=method, **dtw_kwargs)
         P.append(p)
         Q.append(q)
         costs.append(cost)
@@ -164,7 +178,7 @@ def find_indices(ind1: int, X: List[np.ndarray], Y: List[np.ndarray], P: List[np
     return indices, x, y
 
 
-def restrict_and_correlate_lines(X: List[np.ndarray], Y: List[np.ndarray], points, delta_s: float = 2.0) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray], List[np.ndarray], List[float]]:
+def restrict_and_correlate_lines(X: List[np.ndarray], Y: List[np.ndarray], points, delta_s: float = 2.0, method: str = "exact", **dtw_kwargs) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray], List[np.ndarray], List[float]]:
     """
     Restrict centerlines or banklines to a specified segment and correlate them across time.
     
@@ -189,6 +203,10 @@ def restrict_and_correlate_lines(X: List[np.ndarray], Y: List[np.ndarray], point
     delta_s : float, optional
         Target spacing for resampling the centerlines, by default 2.0.
         Units should match the coordinate system of X and Y. If
+    method : {'exact', 'fast'}
+        DTW method used for both correlation passes, see correlate_curves.
+    **dtw_kwargs
+        Extra arguments for method='fast'.
     
     Returns
     -------
@@ -247,7 +265,7 @@ def restrict_and_correlate_lines(X: List[np.ndarray], Y: List[np.ndarray], point
     P = []
     Q = []
     for i in trange(len(X) - 1):
-        p, q, dist = correlate_curves(X[i], X[i+1], Y[i], Y[i+1])
+        p, q, dist = correlate_curves(X[i], X[i+1], Y[i], Y[i+1], method=method, **dtw_kwargs)
         P.append(p)
         Q.append(q)
     indices1, x, y = find_indices(first_index, X, Y, P, Q)
@@ -259,7 +277,7 @@ def restrict_and_correlate_lines(X: List[np.ndarray], Y: List[np.ndarray], point
         x,y,dx,dy,ds,s = resample_centerline(X[i], Y[i], delta_s)
         X[i] = x
         Y[i] = y
-    P, Q, costs = correlate_set_of_curves(X, Y)
+    P, Q, costs = correlate_set_of_curves(X, Y, method=method, **dtw_kwargs)
     return X, Y, P, Q, costs
 
 
